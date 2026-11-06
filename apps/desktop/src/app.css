@@ -1,0 +1,143 @@
+/* ADGitter global theme — metro/transit-map aesthetic. */
+
+:root {
+  /* Chrome */
+  /* Vertical band the floating Toolbar buttons occupy (top offset + button
+     height + a little breathing room): every docked panel reserves this much
+     space at its own top so the toolbar's branches/files/issues/undo
+     clusters always paint on top of empty space, never a panel header. */
+  --float-btn-band: 48px;
+  /* Side-panel slide-over motion. Kept beside `PANEL_SLIDE_MS` in
+     lib/panelSlide.svelte.ts, which times the delayed unmount to match. */
+  --panel-slide-ms: 150ms;
+  --panel-slide-ease: ease;
+  --topbar-bg: #5b5b5d;
+  --topbar-fg: #f4f4f5;
+  --statusbar-bg: #5b5b5d;
+  --statusbar-fg: #e9e9ea;
+  --workspace-bg: #d8d8d8;
+  --row-line: #cccccc;
+
+  /* Surfaces */
+  --panel-bg: #ffffff;
+  --panel-border: #d3d3d3;
+  --panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  --pill-bg: #ffffff;
+  --btn-bg: #c6c6c6;
+  --btn-bg-hover: #bababa;
+  --btn-fg: #3a3a3a;
+
+  /* Text */
+  --fg: #2b2b2b;
+  --fg-soft: #555;
+  --fg-muted: #8c8c8c;
+  --fg-subtle: #b3b3b3;
+
+  /* Interaction */
+  --row-hover: rgba(0, 0, 0, 0.045);
+  --row-selected: rgba(64, 150, 255, 0.16);
+  --select-ring: #2f9bf0;
+
+  /* Ads */
+  --ad-bg: #cdcdcd;
+  --ad-fg: #b9b9b9;
+
+  /* Lane / branch palette — cycled by colorIndex */
+  --lane-0: #27ae60; /* green  (main) */
+  --lane-1: #ec4f9c; /* pink   (uat) */
+  --lane-2: #c46a1b; /* orange (Branch_A) */
+  --lane-3: #7c6cf0; /* purple (tag) */
+  --lane-4: #3a86ff; /* blue */
+  --lane-5: #f2b134; /* amber  (feat) */
+  --lane-6: #16a3a3; /* teal */
+  --lane-7: #e0533d; /* red */
+
+  /* Paid-tier accents — the one place the plan star's colours are defined.
+     There is no pre-existing status vocabulary (no --warn/--err) to borrow,
+     so these reuse the lane palette's hues so a theme pack that restyles the
+     app stays coherent. `free` deliberately has no token: it wears no star. */
+  --plan-basic: #f2b134; /* yellow, = lane-5 */
+  --plan-advance: #e0533d; /* red,    = lane-7 */
+  --plan-enterprise: #3a86ff; /* blue,   = lane-4 */
+
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--sans);
+  color: var(--fg);
+  background: var(--workspace-bg);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Slide-over keyframes for the docked side panels. Global (rather than per
+   component) so every panel travels the same distance at the same tempo;
+   each panel picks the pair matching the edge it is docked to.
+
+   These are CSS keyframes, not a Svelte `transition:` — see Toast.svelte:
+   Svelte's transitions need the Web Animations API, which jsdom lacks. */
+@keyframes panel-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes panel-slide-out-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes panel-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes panel-slide-out-right {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+  background-clip: content-box;
+}

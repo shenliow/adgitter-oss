@@ -1,0 +1,29 @@
+[package]
+name = "license"
+version = "0.0.1"
+publish = false
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+ed25519-dalek = "2"
+base64 = "0.22"
+
+[features]
+# Exposes `sign` + `test_keys` for minting tokens. The desktop app enables this
+# only to sign throwaway dev licenses with the committed TEST key; production
+# signing happens server-side and never links this in.
+mint = []
+
+[dev-dependencies]
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+
+# Production keypair generator. Gated on `mint` so it never builds in the
+# default gate; run: `cargo run -p license --features mint --example keygen`.
+[[example]]
+name = "keygen"
+required-features = ["mint"]

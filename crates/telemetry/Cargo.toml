@@ -1,0 +1,24 @@
+[package]
+name = "telemetry"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+tracing = { workspace = true }
+regex = "1"
+sentry = { version = "0.34", default-features = false, features = [
+    "backtrace",
+    "contexts",
+    "reqwest",
+    "rustls",
+], optional = true }
+
+[features]
+# Enabled by the desktop shell; keeps `cargo test -p telemetry` dependency-light.
+sentry = ["dep:sentry"]
+
+[dev-dependencies]

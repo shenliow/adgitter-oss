@@ -1,0 +1,112 @@
+[package]
+name = "adgitter"
+version = "0.0.1"
+description = "ADGitter — gesture-driven visual Git client"
+authors = ["ADGitter Contributors"]
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "adgitter_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# SECURITY: do NOT add the `devtools` feature. Release builds must ship without
+# the WebView inspector — with the feature off and `debug_assertions` disabled
+# (as `tauri build` compiles), wry never enables devtools (F12 inert, no
+# "Inspect" menu). Runtime key-combos / context-menu are additionally blocked in
+# `apps/desktop/src/lib/harden.ts`. Debug builds keep devtools for development.
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+# Receives the adgitter:// OAuth callback back into the running app.
+tauri-plugin-deep-link = "2"
+# Forwards a second app launch to the already-running primary process
+# (MultiWindow relaunch model — see `lib.rs`'s single-instance hook). Desktop
+# only; not applicable to the mobile targets `lib.rs` is future-proofed for.
+# `deep-link` feature: routes an `adgitter://` URL carried by a relaunch's
+# argv to `tauri-plugin-deep-link`'s own handler automatically, before our
+# callback runs — this is the standard single-instance/deep-link integration.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+git-core = { path = "../../../crates/git-core" }
+telemetry = { path = "../../../crates/telemetry", features = ["sentry"] }
+# `mint` is enabled so the debug-only `mint_test_license` command can sign dev
+# tokens with the committed TEST key. Cargo features are not profile-specific, so
+# the signing path is additionally gated on `cfg(debug_assertions)` and is inert
+# in release builds.
+license = { path = "../../../crates/license", features = ["mint"] }
+serde = { workspace = true }
+# Required at runtime by `tauri::generate_context!()` once tauri.conf.json carries
+# a `plugins` section (deep-link scheme registration).
+serde_json = { workspace = true }
+base64 = "0.22"
+git2 = { workspace = true }
+notify = "6"
+# Percent-encode the repo path into the `?repo=` query param for dynamic
+# MultiWindow windows (open_repo_window).
+percent-encoding = "2"
+# Open the system browser for the desktop OAuth flow (open_external_url command).
+opener = "0.7"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tauri-plugin-store = "2.4.3"
+# Random per-install device id. v4 only — the id must be
+# random, never derived from hardware/hostname (those change and would silently
+# re-bind the license to a "new" device).
+uuid = { version = "1", features = ["v4"] }
+# Exchange the Clerk session JWT for a signed license at `/license/issue`.
+# rustls only — NO OpenSSL (matches the telemetry crate convention).
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "json",
+] }
+# Allowlist SVG sanitisation of remotely-delivered theme packs. A real XML tokeniser, not a regex: the markup is injected with
+# `{@html}` in MetroGraph, so a hand-rolled scanner here would be a security
+# bug waiting to happen. Already in the tree as a transitive dependency.
+quick-xml = "0.39"
+# Integrity hash over a cached theme pack (corruption detection on cache read).
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+# OS credential store for the verified licence token and the issue-tracker PATs.
+# Split per target so a build only compiles the backend it can use.
+#
+# Linux gets a REAL backend rather than falling through to the plugin-store
+# file. Without one, `issue_pat_set` — which deliberately refuses to downgrade a
+# third-party credential to plaintext — simply fails, so issue-tracker tokens
+# could not be stored on Linux at all, and the licence token landed in
+# `license.json` in the clear on every Linux install rather than only on
+# headless/CI boxes.
+#
+# `async-secret-service` (zbus + secret-service) is chosen over
+# `sync-secret-service` (dbus-secret-service) because it is pure Rust: it keeps
+# the original "no extra Linux system libs" property that made the old
+# macOS/Windows-only setup attractive, while still persisting through
+# gnome-keyring / KWallet. `linux-native` (kernel keyutils) is NOT used — it
+# does not survive a reboot, so a licence stored there would vanish. On a box
+# with no D-Bus session (true headless/CI) the backend is unavailable and the
+# existing plugin-store fallback still carries the licence token.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", default-features = false, features = [
+    "async-secret-service",
+    "tokio",
+    "crypto-rust",
+] }
+
+# macOS Security framework / Windows credential store. `cfg(not(linux))` rather
+# than naming the two so a build for any other target still has the crate and
+# fails at runtime with "no backend", not at compile time with "no `keyring`".
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+keyring = { version = "3", default-features = false, features = [
+    "apple-native",
+    "windows-native",
+] }

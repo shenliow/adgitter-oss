@@ -1,0 +1,26 @@
+{
+  "name": "adgitter",
+  "version": "0.0.1",
+  "private": true,
+  "description": "ADGitter — lightweight, cross-platform, gesture-driven Git visualization",
+  "scripts": {
+    "dev": "pnpm --filter desktop tauri dev",
+    "build": "pnpm --filter desktop tauri build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "test:rust": "cargo test --workspace",
+    "fmt": "pnpm -r fmt && cargo fmt --all",
+    "check": "pnpm -r check && cargo clippy --workspace --all-targets -- -D warnings"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "prettier": "^3.3.0",
+    "prettier-plugin-svelte": "^3.2.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.7.0"
+}

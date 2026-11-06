@@ -1,0 +1,44 @@
+[workspace]
+members = [
+    "apps/desktop/src-tauri",
+    "crates/git-core",
+    "crates/telemetry",
+    "crates/license",
+]
+# Free open-core Git logic lives in `crates/git-core`.
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/shenliow/adgitter-oss"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# `https` + `vendored-openssl` + `ssh` are all load-bearing: default-features
+# = false strips git2's https/ssh transports entirely, and without a
+# transport libgit2 rejects the URL scheme at transport-selection time —
+# before credentials are even requested, so every https:// remote (incl. PAT
+# auth) and every git@host / ssh:// remote (GitHub's default clone URL) fails
+# outright. `ssh` pulls in vendored libssh2 via libgit2-sys, which reuses the
+# OpenSSL already vendored below rather than linking a second copy.
+git2 = { version = "0.19", default-features = false, features = [
+  "vendored-libgit2",
+  "https",
+  "vendored-openssl",
+  "ssh",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

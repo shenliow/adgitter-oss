@@ -1,0 +1,6 @@
+[toolchain]
+# Some transitive deps (e.g. time-core 0.1.8) require edition 2024,
+# which is stable from Rust 1.85+. Track stable to stay current.
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

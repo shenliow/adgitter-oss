@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capabilities for ADGitter windows (main + dynamic MultiWindow repo windows)",
+  "windows": ["main", "repo-*"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:webview:default",
+    "core:event:default",
+    "core:path:default",
+    "dialog:allow-open",
+    "store:default",
+    "deep-link:default"
+  ]
+}

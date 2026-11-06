@@ -1,0 +1,49 @@
+# --- Node / JavaScript / TypeScript ---
+node_modules/
+dist/
+build/
+.vite/
+*.log
+.env*
+!.env.example
+
+# --- Secrets (defense-in-depth) ---
+# App-local credential stores must never enter the repo. Access tokens live in
+# repo-secrets.json (keyed by repo path), NEVER in the committable
+# adgitter.config.json. The signing key is KMS/CI-only. These patterns keep an
+# accidental copy in the working tree from ever being staged.
+repo-secrets.json
+**/repo-secrets.json
+settings.json
+*.pem
+*.key
+!**/fixtures/**/*.key
+
+# --- Rust ---
+target/
+debug/
+**/*.rs.bk
+*.rlib
+*.prof*
+
+# --- Tauri ---
+apps/desktop/src-tauri/gen/
+
+# --- Playwright (e2e) ---
+apps/desktop/playwright-report/
+apps/desktop/test-results/
+apps/desktop/blob-report/
+
+# --- Editors / OS ---
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
+
+# Stray spec-kit scaffold (not part of the project)
+/my-project/
+
+# Local Claude Code config / skills (not part of the project)
+.claude/

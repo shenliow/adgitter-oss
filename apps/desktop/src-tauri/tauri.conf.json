@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ADGitter",
+  "version": "0.0.1",
+  "identifier": "dev.adgitter.app",
+  "build": {
+    "beforeDevCommand": "pnpm --filter desktop dev",
+    "beforeBuildCommand": "pnpm --filter desktop build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ADGitter",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 500,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' https://cdn.carbonads.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.carbonads.net https://*.carbonads.com https://img.clerk.com; connect-src ipc: http://ipc.localhost https://srv.carbonads.net; frame-src 'self'"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["adgitter"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Lightweight visual Git client",
+    "longDescription": "ADGitter is a cross-platform, gesture-driven visual Git client."
+  }
+}
