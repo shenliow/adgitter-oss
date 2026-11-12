@@ -259,7 +259,7 @@
   let showCreateCommit = $state(false);
   let showUser = $state(false);
   let showSettings = $state(false);
-  type SettingsTab = 'Issue Panel' | 'Personalize';
+  type SettingsTab = 'Issue Panel' | 'Personalize' | 'Plan';
   /** Tab SettingsModal should land on for the next open, or `null` for its
    *  default ('General'). Reset at every entry point except the issue panel's
    *  "Settings → Issue Panel" link, so a prior issue-link open never leaks
@@ -3780,7 +3780,10 @@
       {/if}
     </main>
 
-    <AdBanner consent={settings.adConsent} />
+    <AdBanner
+      consent={settings.adConsent}
+      onRemoveAds={() => openSettings('Plan')}
+    />
     <StatusBar
       branch={refs?.head.branch ?? null}
       ahead={sync?.ahead ?? 0}

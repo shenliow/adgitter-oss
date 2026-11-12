@@ -633,6 +633,10 @@ export const ja: Catalog = {
   "adGate.buy": "有料プランに切り替える",
   "adGate.signIn": "購入済みの方はサインイン",
   "adGate.decline": "広告に同意しない",
+  "ad.label": "広告",
+  "ad.fallback":
+    "この広告枠が ADGitter 無料版を支えています。有料プランに切り替えると表示されなくなります。",
+  "ad.remove": "広告を消す",
   "crashConsent.label": "エラーレポート",
   "crashConsent.message":
     "問題の修正に役立てるため、クラッシュとエラーのレポートを送信しますか？レポートは Sentry 経由で送信され、メールアドレスとファイルパスは削除され、コードは含まれません。あとで「設定 → プライバシー」から変更できます。",
