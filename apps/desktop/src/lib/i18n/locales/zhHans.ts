@@ -587,6 +587,9 @@ export const zhHans: Catalog = {
   "adGate.buy": "改用付费方案",
   "adGate.signIn": "已购买？登录",
   "adGate.decline": "不接受广告",
+  "ad.label": "广告",
+  "ad.fallback": "这个广告位让 ADGitter 免费版得以持续。改用付费方案即可移除。",
+  "ad.remove": "移除广告",
   "crashConsent.label": "错误报告",
   "crashConsent.message":
     "要发送崩溃与错误报告，帮助我们修复问题吗？报告通过 Sentry 发送，会先移除邮箱和文件路径，不包含你的代码。之后可以在“设置 → 隐私”中更改。",

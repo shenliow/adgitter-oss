@@ -642,6 +642,10 @@ export const de: Catalog = {
   "adGate.buy": "Zu einem kostenpflichtigen Plan wechseln",
   "adGate.signIn": "Bereits gekauft? Anmelden",
   "adGate.decline": "Werbung nicht akzeptieren",
+  "ad.label": "Werbung",
+  "ad.fallback":
+    "Diese Werbefläche finanziert die kostenlose Version von ADGitter. Mit einem kostenpflichtigen Plan entfällt sie.",
+  "ad.remove": "Werbung entfernen",
   "crashConsent.label": "Fehlerberichte",
   "crashConsent.message":
     "Absturz- und Fehlerberichte senden, damit wir Probleme beheben können? Die Berichte gehen über Sentry, E-Mail-Adressen und Dateipfade werden entfernt, Ihr Code ist nie enthalten. Sie können das später unter Einstellungen → Datenschutz ändern.",
