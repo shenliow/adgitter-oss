@@ -9,6 +9,7 @@ mod commands;
 /// binaries entirely. `dev_unlock.rs` fails the build if this guard is removed.
 #[cfg(debug_assertions)]
 mod dev_unlock;
+mod external_links;
 mod loopback_auth;
 mod svg_sanitize;
 mod themes;
@@ -183,6 +184,22 @@ pub fn run() {
                     }
                 });
             }
+        })
+        // The main window is declared in tauri.conf.json with `create: false`
+        // and built here instead, because the new-window handler can only be
+        // attached while a window is being built.
+        .setup(|app| {
+            let config = app
+                .config()
+                .app
+                .windows
+                .first()
+                .cloned()
+                .expect("tauri.conf.json declares the main window");
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+                .on_new_window(external_links::open_in_browser())
+                .build()?;
+            Ok(())
         })
         .manage(watch::WatchState::default())
         // Holds the in-flight RFC 8252 loopback listener for sign-in. The
