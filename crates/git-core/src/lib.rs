@@ -59,7 +59,10 @@ pub use rebase::{
 };
 pub use remap::{HistoryOpOutcome, RemapOutcome};
 pub use remote::{ahead_behind, fetch, pull, push, push_branch, remote_url, AheadBehind};
-pub use repo::{clone_repository, init_repository, probe_path, CloneAuth, ProbeKind, ProbeResult};
+pub use repo::{
+    clone_repository, clone_repository_with, init_repository, probe_path, CloneAuth, ProbeKind,
+    ProbeResult,
+};
 pub use resolve::{abort_op, conflict_state, continue_op, HistoryOpResult, ResolveState};
 pub use undo::{seal_backup, undo_state, UndoBlockedReason, UndoState};
 pub use workdir::{commit, discard, stage, status, unstage, RepoStatus, StatusEntry};

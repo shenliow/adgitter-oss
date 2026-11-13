@@ -7,6 +7,8 @@ import {
   resolveRemoteAuth,
   patRemoteUrl,
   remoteProviderLabel,
+  repoNameFromUrl,
+  cloneDestination,
 } from "./gitHosts";
 
 describe("patUsernameFor", () => {
@@ -212,5 +214,44 @@ describe("PAT SSH transport conversion", () => {
   ])("refuses unsafe or ambiguous target %s", (remote) => {
     expect(patRemoteUrl(remote)).toBeNull();
     expect(resolveRemoteAuth(remote, true)).toBe("pat-needs-https");
+  });
+});
+
+describe("repoNameFromUrl", () => {
+  it.each([
+    ["https://github.com/user/cool-repo.git", "cool-repo"],
+    ["https://github.com/user/cool-repo", "cool-repo"],
+    ["https://github.com/user/cool-repo/", "cool-repo"],
+    ["git@github.com:user/repo.git", "repo"],
+    ["git@host:repo.git", "repo"],
+    ["ssh://git@host:22/team/proj.git", "proj"],
+    ["/srv/git/local.git", "local"],
+    ["C:\\repos\\win.git", "win"],
+    ["", "repository"],
+  ])("%s → %s", (url, name) => {
+    expect(repoNameFromUrl(url)).toBe(name);
+  });
+});
+
+describe("cloneDestination", () => {
+  const url = "https://github.com/u/proj.git";
+  it("clones straight into an empty picked folder", () => {
+    expect(cloneDestination("/home/me/proj", url, true)).toBe("/home/me/proj");
+  });
+  it("adds a repo-named subfolder under a non-empty folder", () => {
+    expect(cloneDestination("/home/me/code", url, false)).toBe(
+      "/home/me/code/proj",
+    );
+    expect(cloneDestination("/home/me/code/", url, false)).toBe(
+      "/home/me/code/proj",
+    );
+  });
+  it("keeps Windows separators", () => {
+    expect(cloneDestination("C:\\Users\\me\\code", url, false)).toBe(
+      "C:\\Users\\me\\code\\proj",
+    );
+  });
+  it("handles the filesystem root", () => {
+    expect(cloneDestination("/", url, false)).toBe("/proj");
   });
 });

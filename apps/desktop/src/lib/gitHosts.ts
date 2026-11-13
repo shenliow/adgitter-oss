@@ -185,3 +185,35 @@ function hostOf(url: string): string {
     return "";
   }
 }
+
+/**
+ * The folder name `git clone <url>` would create: the URL's last path segment
+ * with any trailing `/` or `.git` removed. Handles https, ssh:// and scp-style
+ * (`git@host:owner/repo.git`) URLs as well as local paths.
+ */
+export function repoNameFromUrl(url: string): string {
+  const tail =
+    url
+      .trim()
+      .replace(/[/\\]+$/, "")
+      .split(/[/\\:]/)
+      .pop() ?? "";
+  return tail.replace(/\.git$/i, "") || "repository";
+}
+
+/**
+ * Where a clone lands after the user picks `picked` in the folder picker:
+ * an empty folder is cloned into directly (the user made/chose it for this
+ * repo); any other folder is treated as the parent and gets a
+ * `<repo-name>` subfolder, like `git clone <url>` run inside it.
+ */
+export function cloneDestination(
+  picked: string,
+  url: string,
+  pickedIsEmpty: boolean,
+): string {
+  if (pickedIsEmpty) return picked;
+  const sep = picked.includes("\\") && !picked.includes("/") ? "\\" : "/";
+  const base = picked.replace(/[/\\]+$/, "");
+  return `${base || sep}${base ? sep : ""}${repoNameFromUrl(url)}`;
+}
