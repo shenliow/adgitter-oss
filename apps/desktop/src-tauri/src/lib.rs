@@ -39,8 +39,8 @@ impl FeatureRefusal {
 /// Another window was asked for (a relaunch, or File → New Window). Opening it
 /// is the paid `MultiWindow` feature; without it this refuses with the reason
 /// the upsell should give.
-fn open_new_window(app: &tauri::AppHandle) -> AdgitterResult<()> {
-    match commands::require_feature(app, license::Feature::MultiWindow) {
+async fn open_new_window(app: &tauri::AppHandle) -> AdgitterResult<()> {
+    match commands::require_feature(app, license::Feature::MultiWindow).await {
         // Entitled, but this build has no multi-window to offer.
         Ok(()) => Err(AdgitterError::FeatureLocked("MultiWindow".into())),
         Err(e) => Err(e),
@@ -108,7 +108,7 @@ pub fn run() {
             // somewhere else to return to.
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = open_new_window(&app) {
+                if let Err(e) = open_new_window(&app).await {
                     // Not entitled *here*: no new window — focus whatever's
                     // open (prefer `main`) and let the UI explain why.
                     let existing = app
@@ -178,7 +178,7 @@ pub fn run() {
             if event.id().as_ref() == "new_window" {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(e) = open_new_window(&app) {
+                    if let Err(e) = open_new_window(&app).await {
                         refuse_new_window(&app, &e);
                     }
                 });

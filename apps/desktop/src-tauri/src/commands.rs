@@ -1030,7 +1030,7 @@ pub async fn create_commit(
 ) -> AdgitterResult<String> {
     // Refresh the account default before writing. A configured `user.email`
     // still wins — this only decides what stands in when git has none.
-    sync_commit_identity(&app);
+    sync_commit_identity(&app).await;
     let path = PathBuf::from(repo_path);
     tauri::async_runtime::spawn_blocking(move || git::commit(path, message, amend))
         .await
@@ -1822,17 +1822,68 @@ fn stored_token_uncached(app: &AppHandle) -> Option<String> {
     }
 }
 
+/// Run a keychain-touching closure on Tauri's blocking pool and wait for it.
+///
+/// **Every keychain access goes through here**, because none of them may run on
+/// a thread that is driving the async runtime — which is where the body of an
+/// `async` command runs. On Linux the `keyring` backend is the Secret Service
+/// over zbus's *blocking* API, which calls `block_on` on a runtime of its own,
+/// and tokio refuses that outright on a runtime thread ("Cannot start a runtime
+/// from within a runtime") — before any D-Bus connection is attempted, so it
+/// panicked on every Linux machine, keyring daemon or not. A blocking-pool
+/// thread is allowed to block, so the same call is fine there. macOS and
+/// Windows do not panic, but a keychain read can sit behind an authorisation
+/// prompt for as long as the user takes, and that does not belong on a runtime
+/// worker either.
+///
+/// `None` means the closure panicked. Callers treat that like any other
+/// unavailable keychain instead of failing the command.
+async fn off_runtime<T, F>(f: F) -> Option<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> T + Send + 'static,
+{
+    match tauri::async_runtime::spawn_blocking(f).await {
+        Ok(value) => Some(value),
+        Err(e) => {
+            tracing::warn!(error = %e, "credential store task failed");
+            None
+        }
+    }
+}
+
 /// Read the persisted license token. Prefers the OS keychain (where
 /// `issue_license` writes on this platform), then falls back to the plugin-store
 /// file (headless Linux/CI, or a token written by the frontend) — see
 /// [`stored_token_uncached`] for why debug builds reverse that order. Either
 /// source keeps `verify_license(None)` working across restarts.
 ///
-/// Cached for the life of the process (see [`TokenCache`]). The lock is not
-/// held across the store read: a keychain read can block on a user-facing
-/// prompt, and stalling every other entitlement check behind that would be
-/// worse than the duplicate read a race can cause.
-pub(crate) fn stored_token(app: &AppHandle) -> Option<String> {
+/// Cached for the life of the process (see [`TokenCache`]); a hit answers
+/// without leaving the calling task. A miss is a real keychain read, so it runs
+/// on the blocking pool (see [`off_runtime`]). A read that could not complete
+/// is reported as "no stored token", exactly like an unavailable keychain.
+pub(crate) async fn stored_token(app: &AppHandle) -> Option<String> {
+    // Scoped so the guard is gone before the `.await` below.
+    {
+        if let Ok(c) = TOKEN_CACHE.lock() {
+            if let (_, Some(cached)) = c.read() {
+                return cached;
+            }
+        }
+    }
+    let app = app.clone();
+    off_runtime(move || stored_token_blocking(&app))
+        .await
+        .flatten()
+}
+
+/// [`stored_token`] on the calling thread. **Blocks on the OS keychain**: never
+/// call it from an `async fn` — go through [`stored_token`].
+///
+/// The lock is not held across the store read: a keychain read can block on a
+/// user-facing prompt, and stalling every other entitlement check behind that
+/// would be worse than the duplicate read a race can cause.
+fn stored_token_blocking(app: &AppHandle) -> Option<String> {
     let generation = match TOKEN_CACHE.lock() {
         Ok(c) => match c.read() {
             (_, Some(cached)) => return cached,
@@ -1859,6 +1910,7 @@ fn store_get_token(app: &AppHandle) -> Option<String> {
 }
 
 /// Read the token from the OS keychain, or `None` when unset/unavailable.
+/// Blocking — reached only through [`off_runtime`].
 fn keychain_get_token() -> Option<String> {
     let entry = keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT).ok()?;
     entry.get_password().ok()
@@ -1867,7 +1919,18 @@ fn keychain_get_token() -> Option<String> {
 /// Persist a verified token: keychain first, plugin-store file on any keychain
 /// error (unavailable backend / locked keyring) so the token still survives a
 /// restart. Failures are swallowed — a persist miss only means a re-issue later.
-fn persist_token(app: &AppHandle, token: &str) {
+///
+/// The keychain write runs on the blocking pool (see [`off_runtime`]).
+async fn persist_token(app: &AppHandle, token: &str) {
+    let app = app.clone();
+    let token = token.to_string();
+    // `None` (the write panicked) is one more swallowed persist miss.
+    let _ = off_runtime(move || persist_token_blocking(&app, &token)).await;
+}
+
+/// [`persist_token`] on the calling thread. **Blocks on the OS keychain**:
+/// never call it from an `async fn` — go through [`persist_token`].
+fn persist_token_blocking(app: &AppHandle, token: &str) {
     // The cache is why a later `stored_token` need not touch the keychain at
     // all; seed it here rather than making the next reader pay for it.
     cache_token(Some(token.to_string()));
@@ -1890,7 +1953,8 @@ fn persist_token(app: &AppHandle, token: &str) {
 }
 
 /// Store the token in the OS keychain. Errors bubble up so the caller can fall
-/// back to the plugin-store file.
+/// back to the plugin-store file. Blocking — reached only through
+/// [`off_runtime`].
 fn keychain_set_token(token: &str) -> Result<(), keyring::Error> {
     keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)?.set_password(token)
 }
@@ -2021,9 +2085,24 @@ impl CredentialStores for AppCredentials<'_> {
 /// why sign-out must not be blockable by connectivity, and why seat release is
 /// not attempted. The returned [`SignOutReport`] tells the frontend whether
 /// anything survived so it can warn rather than lie.
+///
+/// The wipe deletes from the OS keychain and reads it back, so it runs on the
+/// blocking pool (see [`off_runtime`]).
 #[tauri::command]
 pub async fn sign_out(app: AppHandle) -> AdgitterResult<SignOutReport> {
-    Ok(destroy_credentials(&AppCredentials(&app)))
+    let report = off_runtime(move || destroy_credentials(&AppCredentials(&app))).await;
+    Ok(report.unwrap_or_else(|| {
+        // The wipe panicked part-way, so nothing is known about what it
+        // removed. `destroy_credentials`' two unconditional promises are kept
+        // here regardless — no cached token, and no account address left as a
+        // commit-author default — and the token is reported as surviving so
+        // the frontend warns instead of claiming a clean sign-out.
+        invalidate_token_cache();
+        git_core::set_fallback_identity(None);
+        SignOutReport {
+            token_remains: true,
+        }
+    }))
 }
 
 // ── Device identity ────────────────────────────────────────────────
@@ -2174,7 +2253,7 @@ pub async fn verify_license(
 ) -> AdgitterResult<LicenseStatusDto> {
     let token = match token {
         Some(t) => t,
-        None => match stored_token(&app) {
+        None => match stored_token(&app).await {
             Some(t) => t,
             None => return Ok(invalid_dto("no license token")),
         },
@@ -2213,8 +2292,8 @@ pub async fn verify_license(
 /// This is the entitlement path only. `verify_license`'s own `pin_device`
 /// default stays `false` on purpose (see its doc comment); the paths that must
 /// not accept a foreign licence — session restore, and now this — opt in.
-fn resolve_license_status(app: &AppHandle) -> license::LicenseStatus {
-    let token = stored_token(app);
+async fn resolve_license_status(app: &AppHandle) -> license::LicenseStatus {
+    let token = stored_token(app).await;
     // Resolved only when there is a token to check it against: `device_id`
     // *mints and persists* on first call, and an install with no licence has no
     // reason to acquire one here. `.ok()` — an unreadable id is handled by
@@ -2308,8 +2387,8 @@ fn fallback_identity_from(status: license::LicenseStatus) -> Option<git_core::Fa
 
 /// Refresh `git-core`'s fallback identity from the persisted license. Called
 /// before anything that writes a commit or reports what identity would be used.
-fn sync_commit_identity(app: &AppHandle) {
-    git_core::set_fallback_identity(fallback_identity_from(resolve_license_status(app)));
+async fn sync_commit_identity(app: &AppHandle) {
+    git_core::set_fallback_identity(fallback_identity_from(resolve_license_status(app).await));
 }
 
 /// Report which identity the next commit in `repo_path` would carry — git's own
@@ -2325,7 +2404,7 @@ pub async fn git_identity_status(
     app: AppHandle,
     repo_path: String,
 ) -> AdgitterResult<git_core::IdentityStatus> {
-    sync_commit_identity(&app);
+    sync_commit_identity(&app).await;
     let path = PathBuf::from(repo_path);
     tauri::async_runtime::spawn_blocking(move || git_core::identity_status(path))
         .await
@@ -2441,8 +2520,15 @@ fn dev_plan_override() -> Option<license::Plan> {
 ///
 /// `pub(crate)` so `lib.rs`'s single-instance relaunch hook can gate the
 /// MultiWindow entitlement the same way `open_repo_window` does.
-pub(crate) fn require_feature(app: &AppHandle, feature: license::Feature) -> AdgitterResult<()> {
-    decide_feature(dev_plan_override(), &resolve_license_status(app), feature)
+pub(crate) async fn require_feature(
+    app: &AppHandle,
+    feature: license::Feature,
+) -> AdgitterResult<()> {
+    decide_feature(
+        dev_plan_override(),
+        &resolve_license_status(app).await,
+        feature,
+    )
 }
 
 /// Query whether the current license entitles `feature` (a canonical feature
@@ -2454,7 +2540,7 @@ pub async fn check_feature(app: AppHandle, feature: String) -> AdgitterResult<bo
     let parsed = feature
         .parse::<license::Feature>()
         .map_err(|_| AdgitterError::Internal(format!("unknown feature: {feature}")))?;
-    Ok(require_feature(&app, parsed).is_ok())
+    Ok(require_feature(&app, parsed).await.is_ok())
 }
 
 /// `/license/issue` 200 response (see `contracts/license-api.md`). Only `license`
@@ -2612,7 +2698,7 @@ async fn license_from_response(
     // Verify offline, pinning this machine's device id, before we trust or store.
     let dto = verify_token(&issued.license, Some(device_id));
     if dto.status != "invalid" {
-        persist_token(app, &issued.license);
+        persist_token(app, &issued.license).await;
     }
     Ok(dto)
 }
@@ -2655,7 +2741,7 @@ pub async fn renew_license(
     app: AppHandle,
     evict_oldest: Option<bool>,
 ) -> AdgitterResult<LicenseStatusDto> {
-    let current = stored_token(&app).ok_or(AdgitterError::NotSignedIn)?;
+    let current = stored_token(&app).await.ok_or(AdgitterError::NotSignedIn)?;
     let device = device_id(&app)?;
     let url = format!("{}/license/renew", api_base().trim_end_matches('/'));
 
@@ -2687,7 +2773,7 @@ pub async fn renew_license(
 
     let dto = verify_token(&issued.license, Some(&device));
     if dto.status != "invalid" {
-        persist_token(&app, &issued.license);
+        persist_token(&app, &issued.license).await;
     }
     Ok(dto)
 }
@@ -2790,7 +2876,7 @@ pub struct TrialStatusDto {
 
 /// POST `{license, machineId}` to a trial endpoint.
 async fn trial_request(app: &AppHandle, path: &str) -> AdgitterResult<reqwest::Response> {
-    let license = stored_token(app).ok_or(AdgitterError::NotSignedIn)?;
+    let license = stored_token(app).await.ok_or(AdgitterError::NotSignedIn)?;
     let url = format!("{}{path}", api_base().trim_end_matches('/'));
     let machine = tauri::async_runtime::spawn_blocking(machine_hash)
         .await
@@ -2839,7 +2925,7 @@ pub async fn start_trial(app: AppHandle) -> AdgitterResult<LicenseStatusDto> {
         .map_err(|e| AdgitterError::Internal(format!("trial response parse failed: {e}")))?;
     let dto = verify_token(&issued.license, Some(&device));
     if dto.status != "invalid" {
-        persist_token(&app, &issued.license);
+        persist_token(&app, &issued.license).await;
     }
     Ok(dto)
 }
@@ -2860,7 +2946,7 @@ pub async fn start_trial(app: AppHandle) -> AdgitterResult<LicenseStatusDto> {
 /// (lazy sign-in) without matching on message text.
 #[tauri::command]
 pub async fn create_checkout(app: AppHandle, kind: String, id: String) -> AdgitterResult<String> {
-    let license = stored_token(&app).ok_or(AdgitterError::NotSignedIn)?;
+    let license = stored_token(&app).await.ok_or(AdgitterError::NotSignedIn)?;
     let url = format!("{}/checkout", api_base().trim_end_matches('/'));
     let body = serde_json::json!({ "license": license, "kind": kind, "id": id });
 
@@ -2921,7 +3007,7 @@ pub async fn create_checkout(app: AppHandle, kind: String, id: String) -> Adgitt
 ///   unexpected status), named by status + code and never by response body.
 #[tauri::command]
 pub async fn create_customer_portal(app: AppHandle) -> AdgitterResult<String> {
-    let license = stored_token(&app).ok_or(AdgitterError::NotSignedIn)?;
+    let license = stored_token(&app).await.ok_or(AdgitterError::NotSignedIn)?;
     let url = format!("{}/portal", api_base().trim_end_matches('/'));
 
     let resp = reqwest::Client::new()
@@ -3256,7 +3342,7 @@ async fn fetch_devices(url: &str, token: &str) -> Result<Vec<DeviceDto>, reqwest
 /// renders its friendly empty state instead of an error.
 #[tauri::command]
 pub async fn list_devices(app: AppHandle) -> AdgitterResult<Vec<DeviceDto>> {
-    let Some(token) = stored_token(&app) else {
+    let Some(token) = stored_token(&app).await else {
         return Ok(Vec::new());
     };
     let url = format!("{}/devices", api_base().trim_end_matches('/'));
@@ -3268,8 +3354,9 @@ pub async fn list_devices(app: AppHandle) -> AdgitterResult<Vec<DeviceDto>> {
 /// network/HTTP failure; never panics.
 #[tauri::command]
 pub async fn remove_device(app: AppHandle, device_id: String) -> AdgitterResult<()> {
-    let token =
-        stored_token(&app).ok_or_else(|| AdgitterError::Internal("not signed in".into()))?;
+    let token = stored_token(&app)
+        .await
+        .ok_or_else(|| AdgitterError::Internal("not signed in".into()))?;
     let url = format!("{}/devices/{}", api_base().trim_end_matches('/'), device_id);
     reqwest::Client::new()
         .delete(&url)
@@ -3322,7 +3409,7 @@ pub async fn dev_seed_license(app: AppHandle, plan: String) -> AdgitterResult<Li
     #[cfg(debug_assertions)]
     {
         let token = build_dev_token(parse_dev_plan(&plan)?, 3650);
-        persist_token(&app, &token);
+        persist_token(&app, &token).await;
         Ok(verify_token(&token, None))
     }
     #[cfg(not(debug_assertions))]
@@ -5305,6 +5392,60 @@ mod token_cache_tests {
         c.set(Some("tok".into()));
         c.clear();
         assert!(c.read().1.is_none());
+    }
+}
+
+#[cfg(test)]
+mod off_runtime_tests {
+    use super::off_runtime;
+
+    /// Run `fut` the way an `async` Tauri command runs: as a task on the async
+    /// runtime, i.e. on a runtime worker thread — not on the test thread.
+    fn on_a_runtime_worker<T, Fut>(fut: Fut) -> T
+    where
+        T: Send + 'static,
+        Fut: std::future::Future<Output = T> + Send + 'static,
+    {
+        tauri::async_runtime::block_on(tauri::async_runtime::spawn(fut))
+            .expect("the async task itself must not panic")
+    }
+
+    /// The property the keychain needs: inside `off_runtime`, code is allowed
+    /// to block on a runtime. Called straight from the task instead, the same
+    /// `block_on` panics with "Cannot start a runtime from within a runtime".
+    #[test]
+    fn the_closure_may_block_on_a_runtime() {
+        let value = on_a_runtime_worker(async {
+            off_runtime(|| tauri::async_runtime::block_on(async { 7 })).await
+        });
+        assert_eq!(value, Some(7));
+    }
+
+    /// A panicking credential store is an unavailable one, not a dead command.
+    #[test]
+    fn a_panicking_closure_is_reported_as_none() {
+        let value = on_a_runtime_worker(async {
+            off_runtime(|| -> u8 { panic!("off_runtime_tests: intentional") }).await
+        });
+        assert_eq!(value, None);
+    }
+
+    /// The Linux startup panic itself, against the real Secret Service backend:
+    /// a keychain read issued from an async task must come back with an answer.
+    /// The entry is one nothing ever writes, so the answer is "nothing there"
+    /// whether a keyring daemon is running (no such item) or not (no backend).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_keychain_read_from_an_async_task_returns_instead_of_panicking() {
+        let read = on_a_runtime_worker(async {
+            off_runtime(|| {
+                keyring::Entry::new("adgitter-test-off-runtime", "never-written")
+                    .and_then(|entry| entry.get_password())
+                    .ok()
+            })
+            .await
+        });
+        assert_eq!(read, Some(None), "the read must complete, and find nothing");
     }
 }
 

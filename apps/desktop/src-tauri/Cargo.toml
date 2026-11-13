@@ -95,6 +95,11 @@ custom-protocol = ["tauri/custom-protocol"]
 # does not survive a reboot, so a licence stored there would vanish. On a box
 # with no D-Bus session (true headless/CI) the backend is unavailable and the
 # existing plugin-store fallback still carries the licence token.
+#
+# This backend drives zbus through its *blocking* API, which panics ("Cannot
+# start a runtime from within a runtime") when called on a thread that is
+# running the async runtime — i.e. from the body of an `async` command. Every
+# keychain call therefore goes through `commands::off_runtime`.
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", default-features = false, features = [
     "async-secret-service",

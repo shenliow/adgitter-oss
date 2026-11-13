@@ -566,7 +566,9 @@ pub async fn theme_pack(app: AppHandle, id: String) -> Result<ThemePackPayload, 
         return Ok(*payload);
     }
 
-    let token = crate::commands::stored_token(&app).ok_or_else(ThemeError::not_signed_in)?;
+    let token = crate::commands::stored_token(&app)
+        .await
+        .ok_or_else(ThemeError::not_signed_in)?;
     let payload = download_pack(&id, &token).await?;
 
     write_cached_pack(&app, &id, &CachedPack::from_payload(&payload, now_secs()));
