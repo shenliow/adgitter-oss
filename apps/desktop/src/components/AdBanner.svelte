@@ -1,9 +1,10 @@
 <!--
-  Bottom ad strip. Renders only on the free tier; the ad runs in a
-  sandboxed iframe via the AdProvider abstraction and is disposed instantly on
-  upgrade or unmount (no leftover iframe/script). The consent is asked by
-  AdGate, not here; until it is granted (or where declining is allowed and the
-  user declined) the strip stays blank.
+  Bottom ad strip. Renders only on the free tier of a build that has Carbon
+  codes (lib/ads/config.ts) — without them there is no strip at all. The ad
+  runs in a sandboxed iframe via the AdProvider abstraction and is disposed
+  instantly on upgrade or unmount (no leftover iframe/script). The consent is
+  asked by AdGate, not here; until it is granted (or where declining is
+  allowed and the user declined) the strip stays blank.
 
   The frame has an opaque origin, so it can't follow the app's theme or
   language on its own: both are resolved here and handed to the provider, and
@@ -13,6 +14,7 @@
   import { getPlan } from '../lib/license.svelte';
   import { t, getLocale } from '../lib/i18n/index.svelte';
   import { CarbonAdsProvider } from '../lib/ads/CarbonAdsProvider';
+  import { carbonConfig, adsConfigured } from '../lib/ads/config';
   import { adColors, type AdColors } from '../lib/ads/adLook';
   import type { AdProvider } from '../lib/ads/AdProvider';
   import type { AdConsent } from '../lib/settings';
@@ -30,20 +32,13 @@
   let slot = $state<HTMLDivElement | null>(null);
   let provider: AdProvider | null = null;
 
-  // Carbon serve/placement codes from the environment. Both present →
-  // the provider embeds the live carbon.js; absent → the frame shows only the
-  // strip's own message, so the lifecycle stays wired without a network call
-  // (dev / pre-acceptance).
-  const carbonConfig = {
-    serve:
-      (import.meta.env.VITE_CARBON_SERVE as string | undefined) || undefined,
-    placement:
-      (import.meta.env.VITE_CARBON_PLACEMENT as string | undefined) ||
-      undefined,
-  };
+  // Fixed for the build: no codes, no strip.
+  const config = carbonConfig();
+  const available = adsConfigured();
 
-  const free = $derived(getPlan() === 'free');
-  const showAd = $derived(free && consent === 'granted');
+  /** The strip exists: an ad build, on the free tier. */
+  const shown = $derived(available && getPlan() === 'free');
+  const showAd = $derived(shown && consent === 'granted');
 
   // The strip's resolved colours and font. `applyTheme` restyles the app by
   // rewriting `:root`'s inline style, so that is what to watch; `theme` only
@@ -90,7 +85,7 @@
       title: t('ad.label'),
       lang: getLocale(),
     };
-    const p = new CarbonAdsProvider(carbonConfig);
+    const p = new CarbonAdsProvider(config);
     provider = p;
     void p.load().then(() => {
       if (provider === p) p.render(target, look);
@@ -102,7 +97,7 @@
   });
 </script>
 
-{#if free}
+{#if shown}
   <aside
     class="ad"
     bind:this={strip}

@@ -203,6 +203,7 @@
   import AdGate from './components/AdGate.svelte';
   import CrashConsentNotice from './components/CrashConsentNotice.svelte';
   import { adGateOpen, mayDeclineAds } from './lib/adGate';
+  import { adsConfigured } from './lib/ads/config';
   import Welcome from './components/Welcome.svelte';
   import OpenOrCreateDialog from './components/OpenOrCreateDialog.svelte';
   import CloneDialog from './components/CloneDialog.svelte';
@@ -425,11 +426,14 @@
 
   // Free tier = ads or pay (lib/adGate.ts). Waits for settings and the
   // entitlement so neither a paying user nor a returning one sees it flash.
+  // A build without Carbon codes has no ads, so it never asks.
   let settingsReady = $state(false);
   const canDeclineAds = mayDeclineAds();
+  const adsAvailable = adsConfigured();
   const showAdGate = $derived(
     settingsReady &&
       adGateOpen({
+        adsAvailable,
         ready: entitlementReady(),
         plan: getPlan(),
         consent: settings.adConsent,

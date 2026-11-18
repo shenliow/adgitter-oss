@@ -8,7 +8,12 @@ let host: HTMLDivElement;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let app: any;
 
-beforeEach(() => setPlan("free"));
+// An ad build: both Carbon codes baked in (lib/ads/config.ts).
+beforeEach(() => {
+  setPlan("free");
+  vi.stubEnv("VITE_CARBON_SERVE", "TEST");
+  vi.stubEnv("VITE_CARBON_PLACEMENT", "adgitter");
+});
 afterEach(() => {
   if (app) unmount(app);
   host?.remove();
@@ -16,6 +21,7 @@ afterEach(() => {
   setPlan("free");
   setLocale("en");
   document.documentElement.removeAttribute("style");
+  vi.unstubAllEnvs();
 });
 
 function render(over: Partial<ComponentProps<typeof AdBanner>> = {}) {
@@ -58,6 +64,23 @@ describe("AdBanner", () => {
     expect(h.querySelector(".ad")).not.toBeNull();
     expect(h.querySelector(".consent")).toBeNull();
     expect(h.querySelector("iframe")).toBeNull();
+  });
+
+  it("renders nothing in a build without Carbon codes", async () => {
+    vi.stubEnv("VITE_CARBON_SERVE", "");
+    vi.stubEnv("VITE_CARBON_PLACEMENT", "");
+    const h = render({ consent: "granted", onRemoveAds: () => {} });
+    await settle();
+    expect(h.querySelector(".ad")).toBeNull();
+    expect(h.querySelector("iframe")).toBeNull();
+    expect(h.querySelector("button")).toBeNull();
+  });
+
+  it("needs both codes, not just one", async () => {
+    vi.stubEnv("VITE_CARBON_PLACEMENT", "");
+    const h = render({ consent: "granted" });
+    await settle();
+    expect(h.querySelector(".ad")).toBeNull();
   });
 
   it("renders nothing on a paid plan", async () => {
