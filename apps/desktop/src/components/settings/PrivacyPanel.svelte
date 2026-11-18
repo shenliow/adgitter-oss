@@ -7,6 +7,7 @@
   import type { AdConsent, CrashConsent } from '../../lib/settings';
   import { getPlan } from '../../lib/license.svelte';
   import { mayDeclineAds } from '../../lib/adGate';
+  import { adsConfigured } from '../../lib/ads/config';
   import { t } from '../../lib/i18n/index.svelte';
 
   let {
@@ -19,6 +20,9 @@
 
   const free = $derived(getPlan() === 'free');
   const canDecline = mayDeclineAds();
+  // A build without Carbon codes loads no ad code, so there is no ad consent
+  // to show or withdraw.
+  const adsAvailable = adsConfigured();
 </script>
 
 <div class="panel">
@@ -35,27 +39,29 @@
     </span>
   </label>
 
-  <div class="row ads">
-    <span>
-      <span class="name">{t('privacy.ads')}</span>
-      <span class="hint">
-        {#if !free}
-          {t('privacy.adsPaid')}
-        {:else if adConsent === 'granted'}
-          {canDecline
-            ? t('privacy.adsWithdrawFree')
-            : t('privacy.adsWithdrawPay')}
-        {:else}
-          {t('privacy.adsNotGiven')}
-        {/if}
+  {#if adsAvailable}
+    <div class="row ads">
+      <span>
+        <span class="name">{t('privacy.ads')}</span>
+        <span class="hint">
+          {#if !free}
+            {t('privacy.adsPaid')}
+          {:else if adConsent === 'granted'}
+            {canDecline
+              ? t('privacy.adsWithdrawFree')
+              : t('privacy.adsWithdrawPay')}
+          {:else}
+            {t('privacy.adsNotGiven')}
+          {/if}
+        </span>
       </span>
-    </span>
-    {#if free && adConsent === 'granted'}
-      <button class="btn" onclick={() => (adConsent = 'declined')}
-        >{t('privacy.adsWithdraw')}</button
-      >
-    {/if}
-  </div>
+      {#if free && adConsent === 'granted'}
+        <button class="btn" onclick={() => (adConsent = 'declined')}
+          >{t('privacy.adsWithdraw')}</button
+        >
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>

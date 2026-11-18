@@ -12,6 +12,8 @@
   "app": {
     "windows": [
       {
+        "label": "main",
+        "create": false,
         "title": "ADGitter",
         "width": 1280,
         "height": 800,
@@ -24,7 +26,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' https://cdn.carbonads.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.carbonads.net https://*.carbonads.com https://img.clerk.com; connect-src ipc: http://ipc.localhost https://srv.carbonads.net; frame-src 'self'"
+      "csp": "default-src 'self'; script-src 'self' https://cdn.carbonads.com https://srv.carbonads.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.carbonads.net https://*.carbonads.com https://*.buysellads.net https://img.clerk.com; connect-src ipc: http://ipc.localhost https://srv.carbonads.net; frame-src 'self'"
     }
   },
   "plugins": {

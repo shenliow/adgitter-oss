@@ -639,6 +639,10 @@ export const fr: Catalog = {
   "adGate.buy": "Passer à une formule payante",
   "adGate.signIn": "Déjà payé ? Se connecter",
   "adGate.decline": "Ne pas accepter la publicité",
+  "ad.label": "Publicité",
+  "ad.fallback":
+    "Cet espace publicitaire finance la version gratuite d’ADGitter. Passez à une formule payante pour le retirer.",
+  "ad.remove": "Retirer la publicité",
   "crashConsent.label": "Rapports d’erreur",
   "crashConsent.message":
     "Envoyer des rapports de plantage et d’erreur pour nous aider à corriger les problèmes ? Ils passent par Sentry, les adresses e-mail et chemins de fichiers sont retirés, et votre code n’est jamais inclus. Vous pourrez changer d’avis dans Réglages → Confidentialité.",

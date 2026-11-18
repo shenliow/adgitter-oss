@@ -619,6 +619,10 @@ export const ko: Catalog = {
   "adGate.buy": "유료 요금제로 변경",
   "adGate.signIn": "이미 구매했나요? 로그인",
   "adGate.decline": "광고에 동의하지 않음",
+  "ad.label": "광고",
+  "ad.fallback":
+    "이 광고 영역 덕분에 ADGitter 무료 버전이 유지됩니다. 유료 요금제로 바꾸면 사라집니다.",
+  "ad.remove": "광고 제거",
   "crashConsent.label": "오류 보고",
   "crashConsent.message":
     "문제 해결을 돕기 위해 충돌 및 오류 보고서를 보낼까요? 보고서는 Sentry를 통해 전송되며 이메일과 파일 경로는 제거되고 코드는 포함되지 않습니다. 나중에 '설정 → 개인정보'에서 바꿀 수 있습니다.",

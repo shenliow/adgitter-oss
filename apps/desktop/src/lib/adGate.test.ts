@@ -17,6 +17,7 @@ describe("mayDeclineAds", () => {
 
 describe("adGateOpen", () => {
   const base = {
+    adsAvailable: true,
     ready: true,
     plan: "free" as const,
     consent: "unset" as const,
@@ -24,6 +25,17 @@ describe("adGateOpen", () => {
   };
   it("opens for a free user who hasn't accepted", () => {
     expect(adGateOpen(base)).toBe(true);
+  });
+  it("never opens in a build without ads to show", () => {
+    expect(adGateOpen({ ...base, adsAvailable: false })).toBe(false);
+    expect(
+      adGateOpen({
+        ...base,
+        adsAvailable: false,
+        consent: "declined",
+        mayDecline: false,
+      }),
+    ).toBe(false);
   });
   it("waits for the entitlement", () => {
     expect(adGateOpen({ ...base, ready: false })).toBe(false);

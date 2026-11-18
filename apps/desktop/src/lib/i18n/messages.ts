@@ -737,6 +737,10 @@ export const en = {
   "adGate.buy": "Switch to a paid plan",
   "adGate.signIn": "Already paid? Sign in",
   "adGate.decline": "Don't accept ads",
+  "ad.label": "Advertisement",
+  "ad.fallback":
+    "This ad space keeps ADGitter's free version going. Switch to a paid plan to remove it.",
+  "ad.remove": "Remove ads",
   "crashConsent.label": "Error reports",
   "crashConsent.message":
     "Send crash and error reports to help us fix problems? Reports go through Sentry with emails and file paths removed, and never include your code. You can change this later in Settings → Privacy.",
@@ -1764,6 +1768,10 @@ const zhHant: Catalog = {
   "adGate.buy": "改用付費方案",
   "adGate.signIn": "已購買？登入",
   "adGate.decline": "不接受廣告",
+  "ad.label": "廣告",
+  "ad.fallback":
+    "這個廣告版位讓 ADGitter 免費版得以持續。改用付費方案即可移除。",
+  "ad.remove": "移除廣告",
   "crashConsent.label": "錯誤報告",
   "crashConsent.message":
     "要傳送當機與錯誤報告，協助我們修正問題嗎？報告透過 Sentry 傳送，會先移除 email 和檔案路徑，不含你的程式碼。之後可以在「設定 → 隱私」更改。",
