@@ -217,6 +217,10 @@ export const ja: Catalog = {
   "clone.gitUrl": "リモート URL",
   "clone.cloning": "クローン中…",
   "clone.recursive": "再帰的にクローン（サブモジュールを含む）",
+  "clone.patToggle": "個人アクセストークン（任意）",
+  "clone.pat": "個人アクセストークン（PAT）",
+  "clone.patHint":
+    "任意: プライベートな https リポジトリにはトークンが必要です（GitHub PAT / GitLab アクセストークン / Bitbucket アクセストークン）。公開リポジトリや ssh:// URL の場合は空欄のままで構いません（システムの SSH 鍵が使用されます）。",
   "welcome.cloneRemote": "リモートからクローン",
   "confirm.createRepo":
     "選択したディレクトリに git プロジェクトがありません。ここに作成しますか？",

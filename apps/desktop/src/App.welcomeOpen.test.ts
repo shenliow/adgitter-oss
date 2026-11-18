@@ -15,6 +15,7 @@ import {
   ipc,
   mountApp,
   settle,
+  storeFiles,
 } from "./test/appHarness";
 import { t } from "./lib/i18n/index.svelte";
 
@@ -112,7 +113,11 @@ describe("Welcome → New / Open", () => {
 });
 
 describe("Welcome → Clone from remote", () => {
-  async function openCloneDialog(url: string, recursive: boolean) {
+  async function openCloneDialog(
+    url: string,
+    recursive: boolean,
+    pat?: string,
+  ) {
     const h = await mountWelcome();
     cloneLink(h).click();
     await settle();
@@ -123,6 +128,14 @@ describe("Welcome → Clone from remote", () => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     if (recursive) (dlg.querySelector("#cl-recursive") as HTMLElement).click();
     flushSync();
+    if (pat !== undefined) {
+      (dlg.querySelector(".pat-toggle") as HTMLElement).click();
+      flushSync();
+      const patInput = dlg.querySelector("#cl-pat") as HTMLInputElement;
+      patInput.value = pat;
+      patInput.dispatchEvent(new Event("input", { bubbles: true }));
+      flushSync();
+    }
     return { h, confirm: dlg.querySelector(".primary") as HTMLButtonElement };
   }
 
@@ -181,5 +194,28 @@ describe("Welcome → Clone from remote", () => {
     expect((dlg.querySelector("#cl-url") as HTMLInputElement).value).toBe(
       "https://x/y.git",
     );
+  });
+
+  it("clones a private https repo with the optional PAT and stores it for the repo", async () => {
+    const { confirm } = await openCloneDialog(
+      "https://github.com/u/private.git",
+      false,
+      "ghp_secret",
+    );
+    dialogApi.open.mockResolvedValue("/code");
+    ipc.probePath.mockResolvedValue({ kind: "nonrepo", path: "/code" });
+    confirm.click();
+    await settle(80);
+
+    expect(ipc.cloneRepository).toHaveBeenCalledWith(
+      "https://github.com/u/private.git",
+      "/code/private",
+      { kind: "password", username: "x-access-token", password: "ghp_secret" },
+      false,
+    );
+    // Persisted per repo, so later pull/push reuse it without Settings.
+    expect(
+      storeFiles.data.get("repo-secrets.json")?.get("/code/private"),
+    ).toMatchObject({ accessToken: "ghp_secret" });
   });
 });

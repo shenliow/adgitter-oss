@@ -219,6 +219,10 @@ export const de: Catalog = {
   "clone.gitUrl": "Remote-URL",
   "clone.cloning": "Wird geklont…",
   "clone.recursive": "Rekursiv klonen (inkl. Submodule)",
+  "clone.patToggle": "Persönliches Zugriffstoken (optional)",
+  "clone.pat": "Persönliches Zugriffstoken (PAT)",
+  "clone.patHint":
+    "Optional: Private HTTPS-Repositories benötigen ein Token (GitHub PAT / GitLab-Zugriffstoken / Bitbucket-Zugriffstoken). Für öffentliche Repositories oder ssh://-URLs leer lassen (es werden die SSH-Schlüssel des Systems verwendet).",
   "welcome.cloneRemote": "Von Remote klonen",
   "confirm.createRepo":
     "Das ausgewählte Verzeichnis enthält kein Git-Projekt. Hier eins erstellen?",

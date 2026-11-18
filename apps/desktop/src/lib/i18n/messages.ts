@@ -277,6 +277,10 @@ export const en = {
   "clone.gitUrl": "Remote URL",
   "clone.cloning": "Cloning…",
   "clone.recursive": "Clone recursively",
+  "clone.patToggle": "Personal access token (optional)",
+  "clone.pat": "Personal access token (PAT)",
+  "clone.patHint":
+    "Optional: private https repos need a token (GitHub PAT / GitLab access token / Bitbucket access token). Leave empty for public repos or ssh:// URLs (system SSH keys are used).",
   "welcome.cloneRemote": "Clone from remote",
   // onboarding confirms
   "confirm.createRepo":
@@ -1372,6 +1376,10 @@ const zhHant: Catalog = {
   "clone.gitUrl": "遠端網址",
   "clone.cloning": "複製中…",
   "clone.recursive": "遞迴複製（包含子模組）",
+  "clone.patToggle": "個人存取權杖（選填）",
+  "clone.pat": "個人存取權杖（PAT）",
+  "clone.patHint":
+    "選填：私有 https 儲存庫需要權杖（GitHub PAT / GitLab 存取權杖 / Bitbucket 存取權杖）。公開儲存庫或 ssh:// 網址可留空（會使用系統 SSH 金鑰）。",
   "welcome.cloneRemote": "從遠端複製",
   "confirm.createRepo": "你選擇的目錄沒有 git 專案，要在此建立一個嗎？",
   "common.close": "關閉",

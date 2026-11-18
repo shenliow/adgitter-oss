@@ -215,6 +215,10 @@ export const hi: Catalog = {
   "clone.gitUrl": "रिमोट URL",
   "clone.cloning": "क्लोन किया जा रहा है…",
   "clone.recursive": "रिकर्सिव रूप से क्लोन करें (सबमॉड्यूल सहित)",
+  "clone.patToggle": "व्यक्तिगत एक्सेस टोकन (वैकल्पिक)",
+  "clone.pat": "व्यक्तिगत एक्सेस टोकन (PAT)",
+  "clone.patHint":
+    "वैकल्पिक: निजी https रिपॉज़िटरी के लिए टोकन आवश्यक है (GitHub PAT / GitLab एक्सेस टोकन / Bitbucket एक्सेस टोकन)। सार्वजनिक रिपॉज़िटरी या ssh:// URL के लिए खाली छोड़ें (सिस्टम SSH कुंजियों का उपयोग होगा)।",
   "welcome.cloneRemote": "रिमोट से क्लोन करें",
   "confirm.createRepo":
     "आपके चुने गए डायरेक्टरी में कोई git प्रोजेक्ट नहीं है। यहाँ एक बनाएँ?",

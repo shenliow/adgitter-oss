@@ -216,6 +216,10 @@ export const ko: Catalog = {
   "clone.gitUrl": "원격 URL",
   "clone.cloning": "복제 중…",
   "clone.recursive": "재귀적으로 복제(서브모듈 포함)",
+  "clone.patToggle": "개인 액세스 토큰 (선택 사항)",
+  "clone.pat": "개인 액세스 토큰 (PAT)",
+  "clone.patHint":
+    "선택 사항: 비공개 https 저장소는 토큰이 필요합니다 (GitHub PAT / GitLab 액세스 토큰 / Bitbucket 액세스 토큰). 공개 저장소나 ssh:// URL은 비워두세요 (시스템 SSH 키가 사용됩니다).",
   "welcome.cloneRemote": "원격에서 복제",
   "confirm.createRepo":
     "선택한 디렉터리에 git 프로젝트가 없습니다. 여기에 새로 만들까요?",

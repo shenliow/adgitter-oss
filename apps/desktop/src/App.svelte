@@ -2957,7 +2957,11 @@
    *  Cancelling the picker leaves the dialog open so the URL isn't lost. An
    *  empty folder is cloned into directly; any other folder gets a
    *  `<repo-name>` subfolder (see `cloneDestination`). */
-  async function startClone(args: { url: string; recursive: boolean }) {
+  async function startClone(args: {
+    url: string;
+    recursive: boolean;
+    auth: CloneAuth;
+  }) {
     if (cloneBusy) return;
     const picked = await browseFolder();
     if (!picked) return;
@@ -2977,29 +2981,32 @@
     url: string;
     dest: string;
     recursive: boolean;
+    auth: CloneAuth;
   }) {
     cloneBusy = true;
     cloneProgress = { received: 0, total: 0 };
     const unlisten = await onCloneProgress((p) => (cloneProgress = p));
     try {
-      await cloneRepository(
-        args.url,
-        args.dest,
-        { kind: 'none' },
-        args.recursive,
-      );
+      await cloneRepository(args.url, args.dest, args.auth, args.recursive);
       await loadRepo(args.dest);
       if (repoPath === args.dest) {
         cloneOpen = false;
-        // Persist the remote URL, so pull/push can reuse it without
-        // re-entering anything in Settings. remoteUrl is per-repo (see the
-        // repo-level settings migration) — repoPath === args.dest here
-        // guarantees the repo just finished opening (and therefore already
-        // seeded its project general config, see `loadRepo`), so write to ITS
-        // project config, not global settings.
+        // Persist what just worked, so pull/push (remoteAuth) can reuse it
+        // without re-entering anything in Settings. remoteUrl/accessToken are
+        // per-repo (see the repo-level settings migration) — repoPath ===
+        // args.dest here guarantees the repo just finished opening (and
+        // therefore already seeded its project general config, see
+        // `loadRepo`), so write to ITS project config + repoSecrets, not
+        // global settings. Only overwrite the stored token when this clone
+        // actually carried one — an anonymous clone of a public repo must not
+        // wipe a token the user configured earlier.
         const baseGeneral =
           projectGeneral() ?? withoutAccessToken(settings.general);
         void setProjectGeneral({ ...baseGeneral, remoteUrl: args.url });
+        if (args.auth.kind === 'password' && args.auth.password) {
+          repoAccessToken = args.auth.password;
+          void setRepoAccessToken(args.dest, args.auth.password);
+        }
         await rememberRepo(args.dest);
       }
     } catch (e) {

@@ -1,12 +1,18 @@
 <!--
-  Clone-from-remote dialog (Welcome → "Clone from remote"): a Remote URL and a
-  "Clone recursively" checkbox. Confirm hands both to the parent, which asks
-  for the destination folder with the native picker and starts the clone right
-  away; the dialog stays up showing transfer progress until it finishes.
-  Public https repos clone anonymously; ssh:// / git@ URLs use the system's
-  SSH agent/keys.
+  Clone-from-remote dialog (Welcome → "Clone from remote"): a Remote URL, a
+  "Clone recursively" checkbox and a collapsed, optional personal access token.
+  Confirm hands them to the parent, which asks for the destination folder with
+  the native picker and starts the clone right away; the dialog stays up
+  showing transfer progress until it finishes.
+
+  Git hosts no longer accept account passwords over HTTPS, so the only secret
+  asked for is a PAT — the matching Basic-auth username is inferred from the
+  URL's host (see lib/gitHosts). Left empty (or collapsed), public https repos
+  clone anonymously and ssh:// / git@ URLs use the system's SSH agent/keys.
 -->
 <script lang="ts">
+  import type { CloneAuth } from '../lib/ipc';
+  import { patUsernameFor } from '../lib/gitHosts';
   import { t } from '../lib/i18n/index.svelte';
 
   let {
@@ -17,17 +23,31 @@
   }: {
     busy?: boolean;
     progress?: { received: number; total: number } | null;
-    onConfirm: (args: { url: string; recursive: boolean }) => void;
+    onConfirm: (args: {
+      url: string;
+      recursive: boolean;
+      auth: CloneAuth;
+    }) => void;
     onCancel: () => void;
   } = $props();
 
   let url = $state('');
   let recursive = $state(false);
+  let patOpen = $state(false);
+  let pat = $state('');
 
   const ready = $derived(url.trim().length > 0 && !busy);
 
+  /** A token only counts while its section is expanded — collapsing it is
+   *  how the user says "no token", without having to clear the field. */
+  function buildAuth(): CloneAuth {
+    const token = patOpen ? pat.trim() : '';
+    if (!token) return { kind: 'none' };
+    return { kind: 'password', username: patUsernameFor(url), password: token };
+  }
+
   function confirm() {
-    if (ready) onConfirm({ url: url.trim(), recursive });
+    if (ready) onConfirm({ url: url.trim(), recursive, auth: buildAuth() });
   }
 
   const pct = $derived(
@@ -81,6 +101,39 @@
       />
       <span>{t('clone.recursive')}</span>
     </label>
+
+    <div class="pat">
+      <button
+        type="button"
+        class="pat-toggle"
+        aria-expanded={patOpen}
+        aria-controls="cl-pat-section"
+        disabled={busy}
+        onclick={() => (patOpen = !patOpen)}
+      >
+        <span class="chev" aria-hidden="true">{patOpen ? '▾' : '▸'}</span>
+        {t('clone.patToggle')}
+      </button>
+      {#if patOpen}
+        <div class="field pat-body" id="cl-pat-section">
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            id="cl-pat"
+            type="password"
+            aria-label={t('clone.pat')}
+            autocomplete="off"
+            autofocus
+            bind:value={pat}
+            disabled={busy}
+            placeholder="ghp_… / glpat-… / ATATT…"
+            onkeydown={(e) => {
+              if (e.key === 'Enter') confirm();
+            }}
+          />
+          <p class="hint">{t('clone.patHint')}</p>
+        </div>
+      {/if}
+    </div>
 
     {#if busy}
       <div class="progress" aria-live="polite">
@@ -165,6 +218,36 @@
   .check input {
     margin: 0;
     accent-color: var(--select-ring);
+  }
+  .pat {
+    margin-bottom: 14px;
+  }
+  .pat-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font: inherit;
+    font-size: 12px;
+    color: var(--fg-soft);
+    cursor: pointer;
+  }
+  .pat-toggle:hover:not(:disabled) {
+    color: var(--fg);
+  }
+  .chev {
+    width: 10px;
+    font-size: 10px;
+  }
+  .pat-body {
+    margin: 8px 0 0;
+  }
+  .hint {
+    margin: 2px 0 0;
+    font-size: 11px;
+    color: var(--fg-muted);
   }
   .progress {
     display: flex;

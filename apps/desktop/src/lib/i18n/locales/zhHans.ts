@@ -213,6 +213,10 @@ export const zhHans: Catalog = {
   "clone.gitUrl": "远程地址",
   "clone.cloning": "克隆中…",
   "clone.recursive": "递归克隆（包含子模块）",
+  "clone.patToggle": "个人访问令牌（可选）",
+  "clone.pat": "个人访问令牌（PAT）",
+  "clone.patHint":
+    "可选：私有 https 仓库需要令牌（GitHub PAT / GitLab 访问令牌 / Bitbucket 访问令牌）。公开仓库或 ssh:// 地址可留空（会使用系统 SSH 密钥）。",
   "welcome.cloneRemote": "从远程克隆",
   "confirm.createRepo": "你选择的目录中没有 git 项目，要在此创建一个吗？",
   "common.close": "关闭",

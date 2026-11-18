@@ -217,6 +217,10 @@ export const fr: Catalog = {
   "clone.gitUrl": "URL distante",
   "clone.cloning": "Clonage en cours…",
   "clone.recursive": "Cloner récursivement (avec les sous-modules)",
+  "clone.patToggle": "Jeton d'accès personnel (facultatif)",
+  "clone.pat": "Jeton d'accès personnel (PAT)",
+  "clone.patHint":
+    "Facultatif : les dépôts https privés nécessitent un jeton (PAT GitHub / jeton d'accès GitLab / jeton d'accès Bitbucket). Laissez vide pour les dépôts publics ou les URL ssh:// (les clés SSH système sont utilisées).",
   "welcome.cloneRemote": "Cloner depuis un dépôt distant",
   "confirm.createRepo":
     "Le répertoire choisi ne contient pas de projet git. En créer un ici ?",

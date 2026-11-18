@@ -42,7 +42,6 @@ describe("CloneDialog", () => {
     // native picker after confirm.
     expect(h.querySelector("#cl-dest")).toBeNull();
     expect(h.querySelector("#cl-label")).toBeNull();
-    expect(h.querySelector("#cl-pat")).toBeNull();
   });
 
   it("Confirm is disabled until a url is entered", () => {
@@ -62,6 +61,7 @@ describe("CloneDialog", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       url: "https://github.com/u/r.git",
       recursive: false,
+      auth: { kind: "none" },
     });
   });
 
@@ -75,6 +75,7 @@ describe("CloneDialog", () => {
     expect(onConfirm).toHaveBeenCalledWith({
       url: "git@github.com:u/r.git",
       recursive: true,
+      auth: { kind: "none" },
     });
   });
 
@@ -104,5 +105,99 @@ describe("CloneDialog", () => {
     );
     (h.querySelector(".scrim") as HTMLButtonElement).click();
     expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  describe("optional personal access token", () => {
+    const toggle = (h: HTMLDivElement) =>
+      h.querySelector(".pat-toggle") as HTMLButtonElement;
+    const setPat = (h: HTMLDivElement, v: string) => {
+      const el = h.querySelector("#cl-pat") as HTMLInputElement;
+      el.value = v;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      flushSync();
+    };
+    const expand = (h: HTMLDivElement) => {
+      toggle(h).click();
+      flushSync();
+    };
+
+    it("is collapsed by default behind an expandable toggle", () => {
+      const h = render({ onConfirm: () => {}, onCancel: () => {} });
+      expect(toggle(h).textContent).toContain(
+        "Personal access token (optional)",
+      );
+      expect(toggle(h).getAttribute("aria-expanded")).toBe("false");
+      expect(h.querySelector("#cl-pat")).toBeNull();
+
+      expand(h);
+      expect(toggle(h).getAttribute("aria-expanded")).toBe("true");
+      const pat = h.querySelector("#cl-pat") as HTMLInputElement;
+      expect(pat.type).toBe("password");
+      expect(h.querySelector(".hint")?.textContent).toContain("Optional");
+
+      expand(h); // click again → collapses
+      expect(h.querySelector("#cl-pat")).toBeNull();
+    });
+
+    it("sends the PAT as password auth with the host's ceremonial username", () => {
+      const onConfirm = vi.fn();
+      const h = render({ onConfirm, onCancel: () => {} });
+      setUrl(h, "https://github.com/u/r.git");
+      expand(h);
+      setPat(h, "  ghp_tok ");
+      primary(h).click();
+      expect(onConfirm.mock.calls[0][0].auth).toEqual({
+        kind: "password",
+        username: "x-access-token",
+        password: "ghp_tok",
+      });
+    });
+
+    it("picks the GitLab username for a gitlab host", () => {
+      const onConfirm = vi.fn();
+      const h = render({ onConfirm, onCancel: () => {} });
+      setUrl(h, "https://gitlab.com/u/r.git");
+      expand(h);
+      setPat(h, "glpat-tok");
+      primary(h).click();
+      expect(onConfirm.mock.calls[0][0].auth).toEqual({
+        kind: "password",
+        username: "oauth2",
+        password: "glpat-tok",
+      });
+    });
+
+    it("an expanded but blank PAT clones anonymously", () => {
+      const onConfirm = vi.fn();
+      const h = render({ onConfirm, onCancel: () => {} });
+      setUrl(h, "https://github.com/u/r.git");
+      expand(h);
+      setPat(h, "   ");
+      primary(h).click();
+      expect(onConfirm.mock.calls[0][0].auth).toEqual({ kind: "none" });
+    });
+
+    it("collapsing the section drops a typed token", () => {
+      const onConfirm = vi.fn();
+      const h = render({ onConfirm, onCancel: () => {} });
+      setUrl(h, "https://github.com/u/r.git");
+      expand(h);
+      setPat(h, "ghp_tok");
+      expand(h); // collapse
+      primary(h).click();
+      expect(onConfirm.mock.calls[0][0].auth).toEqual({ kind: "none" });
+    });
+
+    it("Enter in the PAT field confirms", () => {
+      const onConfirm = vi.fn();
+      const h = render({ onConfirm, onCancel: () => {} });
+      setUrl(h, "https://github.com/u/r.git");
+      expand(h);
+      setPat(h, "ghp_tok");
+      (h.querySelector("#cl-pat") as HTMLInputElement).dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+      expect(onConfirm).toHaveBeenCalledOnce();
+    });
   });
 });
