@@ -204,6 +204,7 @@
   import AdGate from './components/AdGate.svelte';
   import CrashConsentNotice from './components/CrashConsentNotice.svelte';
   import { adGateOpen, mayDeclineAds } from './lib/adGate';
+  import { adsConfigured } from './lib/ads/config';
   import Welcome from './components/Welcome.svelte';
   import CloneDialog from './components/CloneDialog.svelte';
   import BranchEditDialog from './components/BranchEditDialog.svelte';
@@ -259,7 +260,7 @@
   let showCreateCommit = $state(false);
   let showUser = $state(false);
   let showSettings = $state(false);
-  type SettingsTab = 'Issue Panel' | 'Personalize';
+  type SettingsTab = 'Issue Panel' | 'Personalize' | 'Plan';
   /** Tab SettingsModal should land on for the next open, or `null` for its
    *  default ('General'). Reset at every entry point except the issue panel's
    *  "Settings → Issue Panel" link, so a prior issue-link open never leaks
@@ -425,11 +426,14 @@
 
   // Free tier = ads or pay (lib/adGate.ts). Waits for settings and the
   // entitlement so neither a paying user nor a returning one sees it flash.
+  // A build without Carbon codes has no ads, so it never asks.
   let settingsReady = $state(false);
   const canDeclineAds = mayDeclineAds();
+  const adsAvailable = adsConfigured();
   const showAdGate = $derived(
     settingsReady &&
       adGateOpen({
+        adsAvailable,
         ready: entitlementReady(),
         plan: getPlan(),
         consent: settings.adConsent,
@@ -3811,7 +3815,10 @@
       {/if}
     </main>
 
-    <AdBanner consent={settings.adConsent} />
+    <AdBanner
+      consent={settings.adConsent}
+      onRemoveAds={() => openSettings('Plan')}
+    />
     <StatusBar
       branch={refs?.head.branch ?? null}
       ahead={sync?.ahead ?? 0}

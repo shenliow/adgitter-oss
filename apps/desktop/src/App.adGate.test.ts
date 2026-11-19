@@ -3,13 +3,19 @@
  * fresh free user once the entitlement is read, accepting it persists the ad
  * consent alone, and crash reports are asked separately.
  */
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { setPlan } from "./lib/license.svelte";
 import { mountApp, cleanupApp, settle, settingsApi } from "./test/appHarness";
 
+// An ad build unless a test says otherwise (lib/ads/config.ts).
+beforeEach(() => {
+  vi.stubEnv("VITE_CARBON_SERVE", "TEST");
+  vi.stubEnv("VITE_CARBON_PLACEMENT", "adgitter");
+});
 afterEach(() => {
   cleanupApp();
   setPlan("free");
+  vi.unstubAllEnvs();
 });
 
 const gate = (h: HTMLElement) =>
@@ -32,6 +38,21 @@ describe("ad gate", () => {
     const saved = settingsApi.saveSettings.mock.calls.at(-1)![0];
     expect(saved.adConsent).toBe("granted");
     expect(saved.crashReports).toBe("declined"); // untouched
+  });
+
+  it("never asks in a build without Carbon codes, and shows no strip", async () => {
+    vi.stubEnv("VITE_CARBON_SERVE", "");
+    vi.stubEnv("VITE_CARBON_PLACEMENT", "");
+    const h = await mountApp({
+      settings: { adConsent: "unset" },
+      entitlementReady: true,
+    });
+    await settle();
+    expect(gate(h)).toBeNull();
+    expect(h.ownerDocument.querySelector(".ad")).toBeNull();
+    // Nothing was decided on the user's behalf either.
+    const calls = settingsApi.saveSettings.mock.calls;
+    expect(calls.every(([s]) => s.adConsent === "unset")).toBe(true);
   });
 
   it("stays shut until the entitlement is read", async () => {

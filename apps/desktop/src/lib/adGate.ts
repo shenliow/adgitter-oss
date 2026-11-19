@@ -12,6 +12,9 @@
  * using it free" stays. The region is read from the OS languages, which is a
  * proxy — it can over-include (a Korean speaker abroad gets the extra button),
  * which is the safe direction.
+ *
+ * None of this applies to a build without Carbon codes (`lib/ads/config.ts`):
+ * it has no ads to accept, so it asks nothing.
  */
 import type { AdConsent } from "./settings";
 import type { Plan } from "./license.svelte";
@@ -31,15 +34,19 @@ export function mayDeclineAds(
 
 /**
  * Whether the gate must be up: a free user who hasn't accepted ads (and, where
- * declining is allowed, hasn't declined). Waits for the entitlement to be read
- * so a paying user never sees it flash at startup.
+ * declining is allowed, hasn't declined), in a build that has ads to show.
+ * Waits for the entitlement to be read so a paying user never sees it flash at
+ * startup.
  */
 export function adGateOpen(o: {
+  /** This build has Carbon codes (`adsConfigured()`). */
+  adsAvailable: boolean;
   ready: boolean;
   plan: Plan;
   consent: AdConsent;
   mayDecline: boolean;
 }): boolean {
+  if (!o.adsAvailable) return false;
   if (!o.ready || o.plan !== "free") return false;
   if (o.consent === "granted") return false;
   return !(o.consent === "declined" && o.mayDecline);
