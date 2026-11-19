@@ -1,7 +1,8 @@
 <!--
   Welcome launcher: shown when no repository is active. Greets the
-  user, lists recent projects as avatars (initial + name, removable), and offers
-  a New/Open tile. Has its own slim header (logo + gear + user) distinct from the
+  user, lists recent projects as avatars (initial + name, removable), offers
+  a New/Open tile (straight to the native folder picker), and a "Clone from
+  remote" link underneath. Has its own slim header (logo + gear + user) distinct from the
   repo workspace TopBar.
 -->
 <script lang="ts">
@@ -16,6 +17,7 @@
     onOpenRecent,
     onRemoveRecent,
     onNewOpen,
+    onClone,
     onSettings = () => {},
     onUser = () => {},
   }: {
@@ -24,6 +26,8 @@
     onOpenRecent: (r: RecentProject) => void;
     onRemoveRecent: (path: string) => void;
     onNewOpen: () => void;
+    /** Open the clone-from-remote dialog; the link is hidden when absent. */
+    onClone?: () => void;
     onSettings?: () => void;
     onUser?: () => void;
   } = $props();
@@ -90,6 +94,12 @@
         <span class="label">{t('welcome.newOpen')}</span>
       </div>
     </div>
+
+    {#if onClone}
+      <button class="clone-link" onclick={onClone}
+        >{t('welcome.cloneRemote')}</button
+      >
+    {/if}
   </main>
 </div>
 
@@ -198,6 +208,19 @@
   }
   .tile:hover .remove {
     opacity: 1;
+  }
+  .clone-link {
+    margin-top: 36px;
+    border: 0;
+    background: transparent;
+    color: var(--select-ring);
+    font: inherit;
+    font-size: 13px;
+    padding: 0;
+    cursor: pointer;
+  }
+  .clone-link:hover {
+    text-decoration: underline;
   }
   .label {
     font-size: 13px;

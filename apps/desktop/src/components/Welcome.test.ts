@@ -85,4 +85,34 @@ describe("Welcome", () => {
     (h.querySelector(".avatar.new") as HTMLButtonElement).click();
     expect(onNewOpen).toHaveBeenCalledOnce();
   });
+
+  it("shows a 'Clone from remote' link below the tiles that fires onClone", () => {
+    const onClone = vi.fn();
+    const h = render({
+      recents,
+      onOpenRecent: () => {},
+      onRemoveRecent: () => {},
+      onNewOpen: () => {},
+      onClone,
+    });
+    const link = h.querySelector(".clone-link") as HTMLButtonElement;
+    expect(link.textContent?.trim()).toBe("Clone from remote");
+    // Sits after the recents/tiles row.
+    expect(
+      h.querySelector(".tiles")!.compareDocumentPosition(link) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    link.click();
+    expect(onClone).toHaveBeenCalledOnce();
+  });
+
+  it("hides the clone link when no onClone handler is given", () => {
+    const h = render({
+      recents,
+      onOpenRecent: () => {},
+      onRemoveRecent: () => {},
+      onNewOpen: () => {},
+    });
+    expect(h.querySelector(".clone-link")).toBeNull();
+  });
 });

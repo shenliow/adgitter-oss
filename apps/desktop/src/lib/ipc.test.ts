@@ -318,6 +318,17 @@ describe("ipc client", () => {
       url: "https://x/y.git",
       dest: "/dest",
       auth: { kind: "none" },
+      recursive: false,
+    });
+  });
+
+  it("cloneRepository forwards the recursive flag", async () => {
+    await cloneRepository("u", "/d", { kind: "none" }, true);
+    expect(invoke).toHaveBeenCalledWith("clone_repository", {
+      url: "u",
+      dest: "/d",
+      auth: { kind: "none" },
+      recursive: true,
     });
   });
 
@@ -331,6 +342,7 @@ describe("ipc client", () => {
       url: "u",
       dest: "/d",
       auth: { kind: "password", username: "me", password: "tok" },
+      recursive: false,
     });
   });
 

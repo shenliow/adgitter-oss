@@ -9,7 +9,10 @@
 
 use std::path::{Path, PathBuf};
 
-use git2::{build::RepoBuilder, Cred, CredentialType, FetchOptions, RemoteCallbacks, Repository};
+use git2::{
+    build::RepoBuilder, Cred, CredentialType, FetchOptions, RemoteCallbacks, Repository,
+    SubmoduleUpdateOptions,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{AdgitterError, AdgitterResult};
@@ -256,6 +259,20 @@ pub fn clone_repository<P: FnMut(usize, usize)>(
     url: String,
     dest: PathBuf,
     auth: CloneAuth,
+    on_progress: P,
+) -> AdgitterResult<()> {
+    clone_repository_with(url, dest, auth, false, on_progress)
+}
+
+/// [`clone_repository`] with an optional `recursive` pass: when set, every
+/// submodule (and their submodules, depth-first) is initialized and checked
+/// out after the superproject clone, the way `git clone --recursive` does.
+/// A failure anywhere — superproject or submodule — removes the whole clone.
+pub fn clone_repository_with<P: FnMut(usize, usize)>(
+    url: String,
+    dest: PathBuf,
+    auth: CloneAuth,
+    recursive: bool,
     mut on_progress: P,
 ) -> AdgitterResult<()> {
     if dest.exists() && !dir_is_empty(&dest)? {
@@ -267,6 +284,7 @@ pub fn clone_repository<P: FnMut(usize, usize)>(
     let url = authenticated_url(&url, &auth)?;
     let dest_pre_existed = dest.exists();
 
+    let submodule_auth = recursive.then(|| auth.clone());
     let mut cb = RemoteCallbacks::new();
     set_credentials(&mut cb, auth);
     cb.transfer_progress(move |stats| {
@@ -279,8 +297,16 @@ pub fn clone_repository<P: FnMut(usize, usize)>(
     let mut builder = RepoBuilder::new();
     builder.fetch_options(fo);
 
-    match builder.clone(&url, &dest) {
-        Ok(_) => Ok(()),
+    let result = builder
+        .clone(&url, &dest)
+        .map_err(AdgitterError::from)
+        .and_then(|repo| match &submodule_auth {
+            Some(auth) => update_submodules_recursive(&repo, auth),
+            None => Ok(()),
+        });
+
+    match result {
+        Ok(()) => Ok(()),
         Err(e) => {
             // Best-effort cleanup of whatever the failed clone left behind.
             if dest_pre_existed {
@@ -288,9 +314,25 @@ pub fn clone_repository<P: FnMut(usize, usize)>(
             } else {
                 let _ = std::fs::remove_dir_all(&dest);
             }
-            Err(e.into())
+            Err(e)
         }
     }
+}
+
+/// Init + update every submodule of `repo`, then recurse into each one.
+fn update_submodules_recursive(repo: &Repository, auth: &CloneAuth) -> AdgitterResult<()> {
+    for mut sm in repo.submodules()? {
+        let mut cb = RemoteCallbacks::new();
+        set_credentials(&mut cb, auth.clone());
+        let mut fo = FetchOptions::new();
+        fo.remote_callbacks(cb);
+        let mut opts = SubmoduleUpdateOptions::new();
+        opts.fetch(fo);
+        sm.update(true, Some(&mut opts))?;
+        let sub = sm.open()?;
+        update_submodules_recursive(&sub, auth)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -391,6 +433,60 @@ mod tests {
             sha
         );
         assert!(last.1 > 0, "transfer progress was reported");
+    }
+
+    /// A superproject at `sup` whose `libs/sub` submodule points at `sub`
+    /// (which itself carries `sub.txt`). Returns the superproject's URL.
+    fn superproject_with_submodule(sup: &Path, sub: &Path) -> String {
+        init_repo(sub);
+        commit(sub, "sub.txt", "from the submodule");
+
+        let repo = init_repo(sup);
+        commit(sup, "top.txt", "top");
+        let sub_url = format!("file://{}", sub.display());
+        let mut sm = repo
+            .submodule(&sub_url, Path::new("libs/sub"), true)
+            .unwrap();
+        sm.clone(None).unwrap();
+        sm.add_finalize().unwrap();
+
+        let mut index = repo.index().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = repo.signature().unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "add submodule", &tree, &[&parent])
+            .unwrap();
+        format!("file://{}", sup.display())
+    }
+
+    #[test]
+    fn recursive_clone_checks_out_submodules() {
+        let sup = tempfile::TempDir::new().unwrap();
+        let sub = tempfile::TempDir::new().unwrap();
+        let url = superproject_with_submodule(sup.path(), sub.path());
+
+        let dest_dir = tempfile::TempDir::new().unwrap();
+        let dest = dest_dir.path().join("cloned");
+        clone_repository_with(url, dest.clone(), CloneAuth::None, true, |_, _| {}).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(dest.join("libs/sub/sub.txt")).unwrap(),
+            "from the submodule"
+        );
+    }
+
+    #[test]
+    fn non_recursive_clone_leaves_submodules_unpopulated() {
+        let sup = tempfile::TempDir::new().unwrap();
+        let sub = tempfile::TempDir::new().unwrap();
+        let url = superproject_with_submodule(sup.path(), sub.path());
+
+        let dest_dir = tempfile::TempDir::new().unwrap();
+        let dest = dest_dir.path().join("cloned");
+        clone_repository_with(url, dest.clone(), CloneAuth::None, false, |_, _| {}).unwrap();
+
+        assert!(dest.join("top.txt").exists());
+        assert!(!dest.join("libs/sub/sub.txt").exists());
     }
 
     #[test]

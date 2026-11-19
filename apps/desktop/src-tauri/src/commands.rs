@@ -745,17 +745,20 @@ struct CloneProgress {
 }
 
 /// Clone `url` into `dest` with `auth`, emitting `clone-progress` events to the
-/// calling window only.
+/// calling window only. `recursive` also initializes and checks out every
+/// submodule (`git clone --recursive`); omitted means a plain clone.
 #[tauri::command]
 pub async fn clone_repository(
     window: tauri::Window,
     url: String,
     dest: String,
     auth: git::CloneAuth,
+    recursive: Option<bool>,
 ) -> AdgitterResult<()> {
     let p = PathBuf::from(dest);
+    let recursive = recursive.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
-        git::clone_repository(url, p, auth, |received, total| {
+        git::clone_repository_with(url, p, auth, recursive, |received, total| {
             let _ = window.emit_to(
                 window.label(),
                 "clone-progress",
