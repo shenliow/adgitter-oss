@@ -228,6 +228,11 @@ describe("repoNameFromUrl", () => {
     ["/srv/git/local.git", "local"],
     ["C:\\repos\\win.git", "win"],
     ["", "repository"],
+    ["https://host/group/..", "repository"],
+    ["https://host/group/.", "repository"],
+    ["https://host:8443/", "repository"],
+    ["https://host:8443", "repository"],
+    ["file:///srv/git/local.git", "local"],
   ])("%s → %s", (url, name) => {
     expect(repoNameFromUrl(url)).toBe(name);
   });

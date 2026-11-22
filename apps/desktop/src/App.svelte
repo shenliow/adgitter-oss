@@ -692,6 +692,8 @@
   let confirmCreatePath = $state<string | null>(null);
   let onboardBusy = $state(false);
   let cloneBusy = $state(false);
+  // The clone dialog's folder picker/probe is in flight (before `doClone`).
+  let clonePicking = $state(false);
   let cloneProgress = $state<CloneProgress | null>(null);
 
   // --- Remote sync -------------------------------------------------
@@ -2924,10 +2926,12 @@
    *  expected case; only a folder without one asks before creating a repo. */
   async function openFolder() {
     if (onboardBusy) return;
-    const path = await browseFolder();
-    if (!path) return;
+    // Claim the guard before the first await, or a double-click opens two
+    // pickers and races two probes/loads.
     onboardBusy = true;
     try {
+      const path = await browseFolder();
+      if (!path) return;
       const r = await probePath(path);
       if (r.kind === 'repo') await openPickedRepo(path);
       else confirmCreatePath = path;
@@ -2966,16 +2970,21 @@
     recursive: boolean;
     auth: CloneAuth;
   }) {
-    if (cloneBusy) return;
-    const picked = await browseFolder();
-    if (!picked) return;
+    // Claim the guard before the first await: a second Enter/Confirm while
+    // the picker is opening must not start a second picker and clone.
+    if (cloneBusy || clonePicking) return;
+    clonePicking = true;
     let dest: string;
     try {
+      const picked = await browseFolder();
+      if (!picked) return;
       const r = await probePath(picked);
       dest = cloneDestination(picked, args.url, r.kind === 'empty');
     } catch (e) {
       setError(e);
       return;
+    } finally {
+      clonePicking = false;
     }
     await doClone({ ...args, dest });
   }

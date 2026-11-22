@@ -7,6 +7,7 @@
 //! Clone authentication goes through libgit2 `RemoteCallbacks`; a partial clone
 //! is cleaned up on failure and credentials are never logged.
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use git2::{
@@ -21,7 +22,7 @@ use crate::error::{AdgitterError, AdgitterResult};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ProbeKind {
-    /// The path is, or sits inside, a working copy → open it.
+    /// The path is, or (when non-empty) sits inside, a working copy → open it.
     Repo,
     /// An empty directory → offer to init.
     Empty,
@@ -133,20 +134,41 @@ fn pat_username<'a>(url: &str, fallback: &'a str) -> &'a str {
     }
 }
 
+/// Lower-cased `host[:port]` of an `https://` URL (userinfo stripped), or
+/// `None` for any other scheme.
+fn https_host(url: &str) -> Option<String> {
+    let rest = url.trim().strip_prefix("https://")?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.rsplit('@').next().unwrap_or("");
+    (!host.is_empty()).then(|| host.to_ascii_lowercase())
+}
+
 fn credential_callback(
     auth: CloneAuth,
 ) -> impl FnMut(&str, Option<&str>, CredentialType) -> Result<Cred, git2::Error> {
     let mut tried_agent = false;
     let mut key_idx = 0usize;
     let mut pw_attempts = 0u8;
+    // The host the PAT was first handed to. A token is only ever sent back to
+    // that same host, so a redirect elsewhere can't harvest it.
+    let mut pat_host: Option<String> = None;
 
     move |url, username_from_url, allowed| {
         // Explicit PAT credentials take priority over every transport fallback.
         if let CloneAuth::Password { username, password } = &auth {
-            if !url.starts_with("https://") {
+            let Some(host) = https_host(url) else {
                 return Err(git2::Error::from_str(
                     "PAT authentication requires HTTPS; SSH fallback is disabled",
                 ));
+            };
+            match &pat_host {
+                None => pat_host = Some(host),
+                Some(pinned) if *pinned != host => {
+                    return Err(git2::Error::from_str(
+                        "refusing to send the access token to a different host",
+                    ));
+                }
+                Some(_) => {}
             }
             let username = pat_username(url, username);
             if allowed.contains(CredentialType::USER_PASS_PLAINTEXT) {
@@ -229,10 +251,13 @@ pub fn probe_path(path: PathBuf) -> AdgitterResult<ProbeResult> {
     if !path.is_dir() {
         return Err(AdgitterError::InvalidPath(path.display().to_string()));
     }
-    let kind = if Repository::discover(&path).is_ok() {
-        ProbeKind::Repo
-    } else if dir_is_empty(&path)? {
+    // Emptiness wins over `discover`: an empty folder that merely sits inside
+    // some parent repo (e.g. a dotfiles-tracked $HOME) is a fresh spot for a
+    // new repo or a clone, not that parent repo.
+    let kind = if dir_is_empty(&path)? {
         ProbeKind::Empty
+    } else if Repository::discover(&path).is_ok() {
+        ProbeKind::Repo
     } else {
         ProbeKind::Nonrepo
     };
@@ -273,7 +298,7 @@ pub fn clone_repository_with<P: FnMut(usize, usize)>(
     dest: PathBuf,
     auth: CloneAuth,
     recursive: bool,
-    mut on_progress: P,
+    on_progress: P,
 ) -> AdgitterResult<()> {
     if dest.exists() && !dir_is_empty(&dest)? {
         return Err(AdgitterError::InvalidPath(format!(
@@ -285,10 +310,13 @@ pub fn clone_repository_with<P: FnMut(usize, usize)>(
     let dest_pre_existed = dest.exists();
 
     let submodule_auth = recursive.then(|| auth.clone());
+    // Shared so the submodule pass keeps reporting progress after the
+    // superproject transfer reaches 100%.
+    let on_progress = RefCell::new(on_progress);
     let mut cb = RemoteCallbacks::new();
     set_credentials(&mut cb, auth);
-    cb.transfer_progress(move |stats| {
-        on_progress(stats.received_objects(), stats.total_objects());
+    cb.transfer_progress(|stats| {
+        (on_progress.borrow_mut())(stats.received_objects(), stats.total_objects());
         true
     });
 
@@ -301,7 +329,9 @@ pub fn clone_repository_with<P: FnMut(usize, usize)>(
         .clone(&url, &dest)
         .map_err(AdgitterError::from)
         .and_then(|repo| match &submodule_auth {
-            Some(auth) => update_submodules_recursive(&repo, auth),
+            Some(auth) => {
+                update_submodules_recursive(&repo, auth, https_host(&url).as_deref(), &on_progress)
+            }
             None => Ok(()),
         });
 
@@ -310,7 +340,19 @@ pub fn clone_repository_with<P: FnMut(usize, usize)>(
         Err(e) => {
             // Best-effort cleanup of whatever the failed clone left behind.
             if dest_pre_existed {
-                let _ = std::fs::remove_dir_all(dest.join(".git"));
+                // The folder was empty before (checked above), so everything
+                // in it now came from this clone — remove all of it, not just
+                // `.git`, or the checkout is left behind as an orphan tree.
+                if let Ok(entries) = std::fs::read_dir(&dest) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        let _ = if p.is_dir() && !p.is_symlink() {
+                            std::fs::remove_dir_all(&p)
+                        } else {
+                            std::fs::remove_file(&p)
+                        };
+                    }
+                }
             } else {
                 let _ = std::fs::remove_dir_all(&dest);
             }
@@ -319,18 +361,55 @@ pub fn clone_repository_with<P: FnMut(usize, usize)>(
     }
 }
 
+/// The credentials a submodule at `sm_url` may use, given the parent's `auth`
+/// and the https host the parent was fetched from. A PAT is scoped to the host
+/// it was entered for: a submodule on any other host (or over ssh) gets
+/// `None` — anonymous https, or the ssh-agent / default keys for ssh — so the
+/// token never reaches a server named by a repo's `.gitmodules`.
+fn submodule_auth(
+    auth: &CloneAuth,
+    parent_host: Option<&str>,
+    sm_url: &str,
+) -> (CloneAuth, Option<String>) {
+    let relative = sm_url.starts_with("./") || sm_url.starts_with("../");
+    let host = if relative {
+        parent_host.map(str::to_owned)
+    } else {
+        https_host(sm_url)
+    };
+    let auth = match auth {
+        CloneAuth::Password { .. } if host.is_none() || host.as_deref() != parent_host => {
+            CloneAuth::None
+        }
+        other => other.clone(),
+    };
+    (auth, host)
+}
+
 /// Init + update every submodule of `repo`, then recurse into each one.
-fn update_submodules_recursive(repo: &Repository, auth: &CloneAuth) -> AdgitterResult<()> {
+/// Transfer progress keeps flowing to `on_progress` (it restarts per
+/// submodule, so the dialog shows activity instead of a frozen 100%).
+fn update_submodules_recursive<P: FnMut(usize, usize)>(
+    repo: &Repository,
+    auth: &CloneAuth,
+    parent_host: Option<&str>,
+    on_progress: &RefCell<P>,
+) -> AdgitterResult<()> {
     for mut sm in repo.submodules()? {
+        let (auth, host) = submodule_auth(auth, parent_host, sm.url().unwrap_or(""));
         let mut cb = RemoteCallbacks::new();
         set_credentials(&mut cb, auth.clone());
+        cb.transfer_progress(|stats| {
+            (on_progress.borrow_mut())(stats.received_objects(), stats.total_objects());
+            true
+        });
         let mut fo = FetchOptions::new();
         fo.remote_callbacks(cb);
         let mut opts = SubmoduleUpdateOptions::new();
         opts.fetch(fo);
         sm.update(true, Some(&mut opts))?;
         let sub = sm.open()?;
-        update_submodules_recursive(&sub, auth)?;
+        update_submodules_recursive(&sub, &auth, host.as_deref(), on_progress)?;
     }
     Ok(())
 }
@@ -369,7 +448,71 @@ mod tests {
         init_repo(dir.path());
         let sub = dir.path().join("nested");
         fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("file.txt"), "x").unwrap();
         assert_eq!(probe_path(sub).unwrap().kind, ProbeKind::Repo);
+    }
+
+    #[test]
+    fn probe_classifies_an_empty_subdir_of_a_repo_as_empty() {
+        let dir = tempfile::TempDir::new().unwrap();
+        init_repo(dir.path());
+        let sub = dir.path().join("fresh");
+        fs::create_dir_all(&sub).unwrap();
+        assert_eq!(probe_path(sub).unwrap().kind, ProbeKind::Empty);
+    }
+
+    fn pat() -> CloneAuth {
+        CloneAuth::Password {
+            username: "u".into(),
+            password: "secret".into(),
+        }
+    }
+
+    #[test]
+    fn https_host_extracts_lowercased_authority() {
+        assert_eq!(
+            https_host("https://GitHub.com/a/b.git").as_deref(),
+            Some("github.com")
+        );
+        assert_eq!(
+            https_host("https://u:p@host:8443/x").as_deref(),
+            Some("host:8443")
+        );
+        assert_eq!(https_host("git@github.com:a/b.git"), None);
+        assert_eq!(https_host("http://github.com/a"), None);
+    }
+
+    #[test]
+    fn submodule_pat_is_scoped_to_the_parent_host() {
+        let same = submodule_auth(&pat(), Some("github.com"), "https://github.com/o/lib.git");
+        assert!(matches!(same.0, CloneAuth::Password { .. }));
+
+        let rel = submodule_auth(&pat(), Some("github.com"), "../lib.git");
+        assert!(matches!(rel.0, CloneAuth::Password { .. }));
+        assert_eq!(rel.1.as_deref(), Some("github.com"));
+
+        let other = submodule_auth(&pat(), Some("github.com"), "https://attacker.example/x.git");
+        assert!(matches!(other.0, CloneAuth::None));
+
+        let ssh = submodule_auth(&pat(), Some("github.com"), "git@github.com:o/lib.git");
+        assert!(matches!(ssh.0, CloneAuth::None));
+    }
+
+    #[test]
+    fn pat_callback_refuses_a_second_host() {
+        let mut cb = credential_callback(pat());
+        assert!(cb(
+            "https://github.com/o/r.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT
+        )
+        .is_ok());
+        assert!(cb(
+            "https://evil.example/o/r.git",
+            None,
+            CredentialType::USER_PASS_PLAINTEXT
+        )
+        .is_err());
     }
 
     #[test]
@@ -501,6 +644,30 @@ mod tests {
         );
         assert!(res.is_err());
         assert!(!dest.exists(), "partial clone was cleaned up");
+    }
+
+    #[test]
+    fn failed_submodule_into_existing_empty_dest_leaves_it_empty() {
+        let sup = tempfile::TempDir::new().unwrap();
+        let sub = tempfile::TempDir::new().unwrap();
+        let url = superproject_with_submodule(sup.path(), sub.path());
+        // Make the submodule fetch fail after the superproject checked out.
+        fs::remove_dir_all(sub.path()).unwrap();
+
+        let dest = tempfile::TempDir::new().unwrap();
+        let res = clone_repository_with(
+            url,
+            dest.path().to_path_buf(),
+            CloneAuth::None,
+            true,
+            |_, _| {},
+        );
+        assert!(res.is_err());
+        assert!(dest.path().exists(), "the user's folder itself is kept");
+        assert!(
+            dir_is_empty(dest.path()).unwrap(),
+            "checkout and partial submodules are removed, not just .git"
+        );
     }
 
     #[test]

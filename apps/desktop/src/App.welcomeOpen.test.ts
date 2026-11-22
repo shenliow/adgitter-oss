@@ -102,6 +102,18 @@ describe("Welcome → New / Open", () => {
     expect(welcome(h)).not.toBeNull();
   });
 
+  it("a double-click opens only one folder picker", async () => {
+    const h = await mountWelcome();
+    let resolvePick!: (v: string | null) => void;
+    dialogApi.open.mockReturnValue(new Promise((r) => (resolvePick = r)));
+    newOpenTile(h).click();
+    newOpenTile(h).click();
+    await settle();
+    expect(dialogApi.open).toHaveBeenCalledTimes(1);
+    resolvePick(null);
+    await settle();
+  });
+
   it("does nothing when the picker is cancelled", async () => {
     const h = await mountWelcome();
     dialogApi.open.mockResolvedValue(null);
@@ -217,5 +229,19 @@ describe("Welcome → Clone from remote", () => {
     expect(
       storeFiles.data.get("repo-secrets.json")?.get("/code/private"),
     ).toMatchObject({ accessToken: "ghp_secret" });
+  });
+
+  it("confirming twice before the picker returns starts only one clone", async () => {
+    const { confirm } = await openCloneDialog("https://x/y.git", false);
+    let resolvePick!: (v: string | null) => void;
+    dialogApi.open.mockReturnValue(new Promise((r) => (resolvePick = r)));
+    ipc.probePath.mockResolvedValue({ kind: "nonrepo", path: "/code" });
+    confirm.click();
+    confirm.click();
+    await settle();
+    expect(dialogApi.open).toHaveBeenCalledTimes(1);
+    resolvePick("/code");
+    await settle(80);
+    expect(ipc.cloneRepository).toHaveBeenCalledTimes(1);
   });
 });

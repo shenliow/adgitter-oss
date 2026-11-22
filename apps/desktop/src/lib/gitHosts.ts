@@ -192,13 +192,19 @@ function hostOf(url: string): string {
  * (`git@host:owner/repo.git`) URLs as well as local paths.
  */
 export function repoNameFromUrl(url: string): string {
+  let path = url.trim();
+  // For scheme URLs only the path counts — never the host or a `:port`.
+  const scheme = /^[a-z][a-z0-9+.-]*:\/\/[^/]*/i.exec(path);
+  if (scheme) path = path.slice(scheme[0].length);
   const tail =
-    url
-      .trim()
+    path
       .replace(/[/\\]+$/, "")
       .split(/[/\\:]/)
       .pop() ?? "";
-  return tail.replace(/\.git$/i, "") || "repository";
+  const name = tail.replace(/\.git$/i, "");
+  // Never a path-traversal segment (`..` would resolve outside the picked
+  // folder) or a name the filesystem can't hold.
+  return name && name !== "." && name !== ".." ? name : "repository";
 }
 
 /**
