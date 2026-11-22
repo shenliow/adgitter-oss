@@ -486,7 +486,9 @@ export async function reset(
   return invoke<void>("reset", { repoPath, target, mode });
 }
 
-/** Cherry-pick `commits` (in order) onto the current branch. */
+/** Cherry-pick a commit selection onto the current branch. Order is
+ *  ignored: the backend replays in history order and rebuilds the
+ *  selection's own merge/branch shape. */
 export async function cherryPick(
   repoPath: string,
   commits: string[],

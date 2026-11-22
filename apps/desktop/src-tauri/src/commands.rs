@@ -1203,7 +1203,8 @@ pub async fn reset(repo_path: String, target: String, mode: String) -> AdgitterR
         .map_err(|e| AdgitterError::Internal(e.to_string()))?
 }
 
-/// Cherry-pick `commits` (in order) onto the current branch.
+/// Cherry-pick a commit selection onto the current branch, in history order
+/// and keeping its merge/branch shape (input order is ignored).
 #[tauri::command]
 pub async fn cherry_pick(repo_path: String, commits: Vec<String>) -> AdgitterResult<()> {
     let path = PathBuf::from(repo_path);

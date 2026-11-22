@@ -224,3 +224,28 @@ export function isSelected(sel: Selection, sha: string): boolean {
 export function selectedInOrder(sel: Selection, order: string[]): string[] {
   return order.filter((s) => sel.shas.has(s));
 }
+
+/**
+ * Selected shas in history order, **oldest first**: by commit `timestamp`
+ * ascending, ties broken by on-screen position (lower in the newest-first
+ * `commits` list = older). Click/selection order never matters — picking
+ * #1, #4, #3, #2 yields #1, #2, #3, #4. The backend rebuilds the selection's
+ * own branch/merge shape from this set (see git-core `pick_graph`).
+ */
+export function chronological(
+  shas: Iterable<string>,
+  commits: (CommitNode & { timestamp: number })[],
+): string[] {
+  const want = new Set(shas);
+  const pos = new Map<string, number>();
+  const rows = commits.filter((c) => {
+    if (!want.has(c.sha)) return false;
+    pos.set(c.sha, pos.size);
+    return true;
+  });
+  return rows
+    .sort(
+      (a, b) => a.timestamp - b.timestamp || pos.get(b.sha)! - pos.get(a.sha)!,
+    )
+    .map((c) => c.sha);
+}

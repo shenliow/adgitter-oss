@@ -164,34 +164,31 @@ pub fn reset(repo_path: PathBuf, target: String, mode: String) -> AdgitterResult
     Ok(())
 }
 
-/// Cherry-pick `commits` (in order) onto the current branch.
+/// Cherry-pick a selection of `commits` onto the current branch.
+///
+/// The input order is irrelevant: the selection is replayed in history order
+/// (topological, oldest author time first) and its own merge/branch shape is
+/// rebuilt on the branch — see [`crate::pick_graph`]. Everything is built
+/// off-HEAD first, so a conflict leaves the branch, index and working tree
+/// untouched and no undo entry behind.
 pub fn cherry_pick(repo_path: PathBuf, commits: Vec<String>) -> AdgitterResult<()> {
     let _lock = lock_mutations();
     let repo = open_repo(&repo_path)?;
     let branch = current_branch(&repo)?;
+    let picks = commits
+        .iter()
+        .map(|rev| resolve_commit(&repo, rev).map(|c| c.id()))
+        .collect::<AdgitterResult<Vec<_>>>()?;
     let backup = create_backup(&repo, "cherry-pick", &branch)?;
     let committer = signature(&repo)?;
+    let head = repo.head()?.peel_to_commit()?.id();
 
-    for rev in &commits {
-        let pick = resolve_commit(&repo, rev)?;
-        let head = repo.head()?.peel_to_commit()?;
-        repo.cherrypick(&pick, None)?;
-        if repo.index()?.has_conflicts() {
-            abort_to(&repo, head.id())?;
-            return Err(AdgitterError::Conflict {
-                sha: pick.id().to_string(),
-            });
-        }
-        let tree = repo.find_tree(repo.index()?.write_tree()?)?;
-        repo.commit(
-            Some("HEAD"),
-            &pick.author(),
-            &committer,
-            pick.message().unwrap_or("cherry-pick"),
-            &tree,
-            &[&head],
-        )?;
-        repo.cleanup_state()?;
+    let result = crate::pick_graph::plan(&repo, &picks)
+        .and_then(|steps| crate::pick_graph::replay(&repo, &steps, head, &committer))
+        .and_then(|tip| crate::pick_graph::advance_checked_out(&repo, &branch, head, tip));
+    if let Err(e) = result {
+        drop_backup(&repo, &backup);
+        return Err(e);
     }
     crate::undo::seal(&repo, &backup)?;
     Ok(())

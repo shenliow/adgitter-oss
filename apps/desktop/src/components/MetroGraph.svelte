@@ -24,6 +24,7 @@
     type Modifiers,
   } from '../lib/dragDispatch';
   import { discardedByReset } from '../lib/resetPreview';
+  import { chronological } from '../lib/selection';
   import { createEdgeAutoScroll } from '../lib/edgeAutoScroll';
   import Avatar from './Avatar.svelte';
   import { t } from '../lib/i18n/index.svelte';
@@ -962,8 +963,9 @@
   });
 
   /** Commits carried by a commit-node drag: the multi-selection (if the
-   * grabbed node is part of it), else just that node — always oldest-first so
-   * cherry-pick replays in history order. `branch` is `selectedBranch` iff the
+   * grabbed node is part of it), else just that node — always in history
+   * order (commit time, oldest first; never click order) so cherry-pick
+   * replays them the way they were made. `branch` is `selectedBranch` iff the
    * grabbed node is part of the current selection AND a branch is selected as
    * a unit — i.e. branch mode is still intact (any selection edit clears
    * `selectedBranch` in the parent, so this can't go stale). Grabbing a node
@@ -972,10 +974,7 @@
   function dragShas(sha: string): { shas: string[]; branch: string | null } {
     const inSelection = selection.has(sha);
     const set = inSelection && selection.size > 1 ? selection : new Set([sha]);
-    const shas = commits
-      .filter((c) => set.has(c.sha))
-      .map((c) => c.sha)
-      .reverse();
+    const shas = chronological(set, commits);
     return { shas, branch: inSelection ? selectedBranch : null };
   }
 

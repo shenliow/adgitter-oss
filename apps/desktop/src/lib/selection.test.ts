@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  chronological,
   emptySelection,
   single,
   applyClick,
@@ -206,5 +207,37 @@ describe("helpers", () => {
   it("selectedInOrder returns selected shas in screen order", () => {
     const s = applyMarquee(emptySelection(), ["c2", "c5", "c3"], NO);
     expect(selectedInOrder(s, order)).toEqual(["c5", "c3", "c2"]);
+  });
+});
+
+describe("chronological", () => {
+  // Newest-first, as the graph renders them.
+  const commits = [
+    { sha: "c4", parents: ["c3"], timestamp: 400 },
+    { sha: "c3", parents: ["c2"], timestamp: 300 },
+    { sha: "c2", parents: ["c1"], timestamp: 200 },
+    { sha: "c1", parents: [], timestamp: 100 },
+  ];
+
+  it("orders by commit time, never by click order", () => {
+    expect(chronological(["c1", "c4", "c3", "c2"], commits)).toEqual([
+      "c1",
+      "c2",
+      "c3",
+      "c4",
+    ]);
+  });
+
+  it("breaks timestamp ties by on-screen position (lower = older)", () => {
+    const tied = commits.map((c) => ({ ...c, timestamp: 5 }));
+    expect(chronological(new Set(["c2", "c4", "c3"]), tied)).toEqual([
+      "c2",
+      "c3",
+      "c4",
+    ]);
+  });
+
+  it("drops shas that are not loaded", () => {
+    expect(chronological(["c2", "zzz"], commits)).toEqual(["c2"]);
   });
 });
