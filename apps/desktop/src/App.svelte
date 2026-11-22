@@ -90,6 +90,7 @@
   } from './lib/settings';
   import {
     patUsernameFor,
+    cloneDestination,
     sanitizeRemoteUrl,
     isHttpsRemote,
     resolveRemoteAuth,
@@ -205,7 +206,6 @@
   import { adGateOpen, mayDeclineAds } from './lib/adGate';
   import { adsConfigured } from './lib/ads/config';
   import Welcome from './components/Welcome.svelte';
-  import OpenOrCreateDialog from './components/OpenOrCreateDialog.svelte';
   import CloneDialog from './components/CloneDialog.svelte';
   import BranchEditDialog from './components/BranchEditDialog.svelte';
   import CountdownPrompt from './components/CountdownPrompt.svelte';
@@ -686,13 +686,14 @@
 
   // --- Onboarding / Welcome flow ---------------------------------------
   let recents = $state<RecentProject[]>([]);
-  let welcomeDialog = $state<'open-create' | 'clone' | null>(null);
-  // A pending open/create awaiting the user's confirm after probing a path.
-  let confirmRepo = $state<{ kind: 'open' | 'create'; path: string } | null>(
-    null,
-  );
+  // Clone-from-remote dialog (Welcome → "Clone from remote").
+  let cloneOpen = $state(false);
+  // A picked folder with no git repo, awaiting "create a new one here?".
+  let confirmCreatePath = $state<string | null>(null);
   let onboardBusy = $state(false);
   let cloneBusy = $state(false);
+  // The clone dialog's folder picker/probe is in flight (before `doClone`).
+  let clonePicking = $state(false);
   let cloneProgress = $state<CloneProgress | null>(null);
 
   // --- Remote sync -------------------------------------------------
@@ -2914,13 +2915,26 @@
     }
   }
 
-  /** From the open-or-create dialog: classify the chosen path and route. */
-  async function chooseLocation(path: string) {
+  /** Open `path` as the active repo and, once it loaded, add it to recents. */
+  async function openPickedRepo(path: string) {
+    await loadRepo(path);
+    if (repoPath === path) await rememberRepo(path);
+  }
+
+  /** Welcome "New / Open": straight to the native folder picker. A folder
+   *  that is (or sits inside) a git repo opens right away — that's the
+   *  expected case; only a folder without one asks before creating a repo. */
+  async function openFolder() {
+    if (onboardBusy) return;
+    // Claim the guard before the first await, or a double-click opens two
+    // pickers and races two probes/loads.
     onboardBusy = true;
     try {
+      const path = await browseFolder();
+      if (!path) return;
       const r = await probePath(path);
-      welcomeDialog = null;
-      confirmRepo = { kind: r.kind === 'repo' ? 'open' : 'create', path };
+      if (r.kind === 'repo') await openPickedRepo(path);
+      else confirmCreatePath = path;
     } catch (e) {
       setError(e);
     } finally {
@@ -2928,16 +2942,16 @@
     }
   }
 
-  /** Confirm the pending open/create from `confirmRepo`. */
-  async function confirmOnboard() {
-    if (!confirmRepo) return;
-    const { kind, path } = confirmRepo;
+  /** "Create a new git repo here?" → yes: init, then open it. */
+  async function confirmCreateRepo() {
+    const path = confirmCreatePath;
+    if (!path) return;
     onboardBusy = true;
     try {
-      if (kind === 'create') await initRepository(path);
+      await initRepository(path);
       await loadRepo(path);
       if (repoPath === path) {
-        confirmRepo = null;
+        confirmCreatePath = null;
         await rememberRepo(path);
       }
     } catch (e) {
@@ -2947,24 +2961,52 @@
     }
   }
 
+  /** Clone dialog confirmed: pick the destination folder, then clone at once.
+   *  Cancelling the picker leaves the dialog open so the URL isn't lost. An
+   *  empty folder is cloned into directly; any other folder gets a
+   *  `<repo-name>` subfolder (see `cloneDestination`). */
+  async function startClone(args: {
+    url: string;
+    recursive: boolean;
+    auth: CloneAuth;
+  }) {
+    // Claim the guard before the first await: a second Enter/Confirm while
+    // the picker is opening must not start a second picker and clone.
+    if (cloneBusy || clonePicking) return;
+    clonePicking = true;
+    let dest: string;
+    try {
+      const picked = await browseFolder();
+      if (!picked) return;
+      const r = await probePath(picked);
+      dest = cloneDestination(picked, args.url, r.kind === 'empty');
+    } catch (e) {
+      setError(e);
+      return;
+    } finally {
+      clonePicking = false;
+    }
+    await doClone({ ...args, dest });
+  }
+
   /** Clone a remote into `dest`, streaming progress, then open it. */
   async function doClone(args: {
     url: string;
     dest: string;
-    label: string;
+    recursive: boolean;
     auth: CloneAuth;
   }) {
     cloneBusy = true;
     cloneProgress = { received: 0, total: 0 };
     const unlisten = await onCloneProgress((p) => (cloneProgress = p));
     try {
-      await cloneRepository(args.url, args.dest, args.auth);
+      await cloneRepository(args.url, args.dest, args.auth, args.recursive);
       await loadRepo(args.dest);
       if (repoPath === args.dest) {
-        welcomeDialog = null;
+        cloneOpen = false;
         // Persist what just worked, so pull/push (remoteAuth) can reuse it
         // without re-entering anything in Settings. remoteUrl/accessToken are
-        // per-repo now (see the repo-level settings migration) — repoPath ===
+        // per-repo (see the repo-level settings migration) — repoPath ===
         // args.dest here guarantees the repo just finished opening (and
         // therefore already seeded its project general config, see
         // `loadRepo`), so write to ITS project config + repoSecrets, not
@@ -2978,11 +3020,7 @@
           repoAccessToken = args.auth.password;
           void setRepoAccessToken(args.dest, args.auth.password);
         }
-        try {
-          recents = await addRecent({ path: args.dest, name: args.label });
-        } catch (e) {
-          console.error('addRecent failed', e);
-        }
+        await rememberRepo(args.dest);
       }
     } catch (e) {
       setError(e);
@@ -3568,8 +3606,10 @@
           void removeRecentEntry(path);
       }}
       onNewOpen={() => {
-        if (tutAllows({ kind: 'other', name: 'open-repo' }))
-          welcomeDialog = 'open-create';
+        if (tutAllows({ kind: 'other', name: 'open-repo' })) void openFolder();
+      }}
+      onClone={() => {
+        if (tutAllows({ kind: 'other', name: 'open-repo' })) cloneOpen = true;
       }}
       onSettings={() => openSettings()}
       onUser={toggleUserMenu}
@@ -3941,22 +3981,12 @@
   />
 {/if}
 
-{#if welcomeDialog === 'open-create'}
-  <OpenOrCreateDialog
-    busy={onboardBusy}
-    onBrowse={browseFolder}
-    onConfirm={chooseLocation}
-    onClone={() => (welcomeDialog = 'clone')}
-    onCancel={() => (welcomeDialog = null)}
-  />
-{/if}
-{#if welcomeDialog === 'clone'}
+{#if cloneOpen}
   <CloneDialog
     busy={cloneBusy}
     progress={cloneProgress}
-    onBrowse={browseFolder}
-    onClone={doClone}
-    onCancel={() => (welcomeDialog = null)}
+    onConfirm={(args) => void startClone(args)}
+    onCancel={() => (cloneOpen = false)}
   />
 {/if}
 {#if editingBranch}
@@ -4025,18 +4055,14 @@
     onCancel={() => (checkoutChoice = null)}
   />
 {/if}
-{#if confirmRepo}
+{#if confirmCreatePath}
   <ConfirmDialog
-    title={confirmRepo.kind === 'open'
-      ? t('confirm.openRepo')
-      : t('confirm.createRepo')}
-    confirmLabel={confirmRepo.kind === 'open'
-      ? t('common.open')
-      : t('common.create')}
+    title={t('confirm.createRepo')}
+    confirmLabel={t('common.create')}
     cancelLabel={t('common.cancel')}
     busy={onboardBusy}
-    onConfirm={confirmOnboard}
-    onCancel={() => (confirmRepo = null)}
+    onConfirm={confirmCreateRepo}
+    onCancel={() => (confirmCreatePath = null)}
   />
 {/if}
 

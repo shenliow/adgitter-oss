@@ -1,11 +1,14 @@
 <!--
-  Clone-remote dialog: Project Label, Git URL, target Location (+browse),
-  and an optional personal access token. Git hosts no longer accept account
-  passwords over HTTPS (GitHub since 2021; Bitbucket retired app passwords in
-  2026), so the only secret this dialog asks for is a PAT — the matching Basic-
-  auth username is inferred from the URL's host (see lib/gitHosts). Left empty,
-  public https repos clone anonymously and ssh:// / git@ URLs use the system's
-  SSH agent/keys. Shows transfer progress while cloning.
+  Clone-from-remote dialog (Welcome → "Clone from remote"): a Remote URL, a
+  "Clone recursively" checkbox and a collapsed, optional personal access token.
+  Confirm hands them to the parent, which asks for the destination folder with
+  the native picker and starts the clone right away; the dialog stays up
+  showing transfer progress until it finishes.
+
+  Git hosts no longer accept account passwords over HTTPS, so the only secret
+  asked for is a PAT — the matching Basic-auth username is inferred from the
+  URL's host (see lib/gitHosts). Left empty (or collapsed), public https repos
+  clone anonymously and ssh:// / git@ URLs use the system's SSH agent/keys.
 -->
 <script lang="ts">
   import type { CloneAuth } from '../lib/ipc';
@@ -15,56 +18,36 @@
   let {
     busy = false,
     progress = null,
-    onBrowse,
-    onClone,
+    onConfirm,
     onCancel,
   }: {
     busy?: boolean;
     progress?: { received: number; total: number } | null;
-    onBrowse: () => Promise<string | null>;
-    onClone: (args: {
+    onConfirm: (args: {
       url: string;
-      dest: string;
-      label: string;
+      recursive: boolean;
       auth: CloneAuth;
     }) => void;
     onCancel: () => void;
   } = $props();
 
-  let label = $state('');
   let url = $state('');
-  let dest = $state('');
+  let recursive = $state(false);
+  let patOpen = $state(false);
   let pat = $state('');
 
-  const ready = $derived(
-    url.trim().length > 0 && dest.trim().length > 0 && !busy,
-  );
+  const ready = $derived(url.trim().length > 0 && !busy);
 
-  /** Recents display name: the label, else the repo name from the URL. */
-  function repoName(u: string): string {
-    const tail = u.trim().replace(/\/+$/, '').split(/[/\\]/).pop() ?? '';
-    return tail.replace(/\.git$/, '') || 'repository';
-  }
-
+  /** A token only counts while its section is expanded — collapsing it is
+   *  how the user says "no token", without having to clear the field. */
   function buildAuth(): CloneAuth {
-    const token = pat.trim();
+    const token = patOpen ? pat.trim() : '';
     if (!token) return { kind: 'none' };
     return { kind: 'password', username: patUsernameFor(url), password: token };
   }
 
-  async function browse() {
-    const picked = await onBrowse();
-    if (picked) dest = picked;
-  }
-
-  function clone() {
-    if (!ready) return;
-    onClone({
-      url: url.trim(),
-      dest: dest.trim(),
-      label: label.trim() || repoName(url),
-      auth: buildAuth(),
-    });
+  function confirm() {
+    if (ready) onConfirm({ url: url.trim(), recursive, auth: buildAuth() });
   }
 
   const pct = $derived(
@@ -81,7 +64,12 @@
 />
 
 <div class="overlay">
-  <button class="scrim" aria-label={t('common.cancel')} onclick={onCancel}
+  <button
+    class="scrim"
+    aria-label={t('common.cancel')}
+    onclick={() => {
+      if (!busy) onCancel();
+    }}
   ></button>
   <div
     class="dialog"
@@ -90,51 +78,61 @@
     aria-label={t('clone.title')}
   >
     <div class="field">
-      <label for="cl-label">{t('clone.projectLabel')}</label>
-      <input
-        id="cl-label"
-        bind:value={label}
-        placeholder={t('clone.projectPlaceholder')}
-      />
-    </div>
-
-    <div class="field">
       <label for="cl-url">{t('clone.gitUrl')}</label>
       <!-- svelte-ignore a11y_autofocus -->
       <input
         id="cl-url"
         autofocus
         bind:value={url}
+        disabled={busy}
         placeholder="https://github.com/user/repo.git"
+        onkeydown={(e) => {
+          if (e.key === 'Enter') confirm();
+        }}
       />
     </div>
 
-    <div class="field">
-      <label for="cl-dest">{t('clone.location')}</label>
-      <div class="row">
-        <input
-          id="cl-dest"
-          bind:value={dest}
-          placeholder={t('clone.locationPlaceholder')}
-        />
-        <button
-          class="browse"
-          onclick={browse}
-          disabled={busy}
-          title={t('common.browse')}>…</button
-        >
-      </div>
-    </div>
-
-    <div class="field">
-      <label for="cl-pat">{t('clone.pat')}</label>
+    <label class="check">
       <input
-        id="cl-pat"
-        type="password"
-        bind:value={pat}
-        placeholder="ghp_… / glpat-… / ATATT…"
+        id="cl-recursive"
+        type="checkbox"
+        bind:checked={recursive}
+        disabled={busy}
       />
-      <p class="hint">{t('clone.patHint')}</p>
+      <span>{t('clone.recursive')}</span>
+    </label>
+
+    <div class="pat">
+      <button
+        type="button"
+        class="pat-toggle"
+        aria-expanded={patOpen}
+        aria-controls="cl-pat-section"
+        disabled={busy}
+        onclick={() => (patOpen = !patOpen)}
+      >
+        <span class="chev" aria-hidden="true">{patOpen ? '▾' : '▸'}</span>
+        {t('clone.patToggle')}
+      </button>
+      {#if patOpen}
+        <div class="field pat-body" id="cl-pat-section">
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            id="cl-pat"
+            type="password"
+            aria-label={t('clone.pat')}
+            autocomplete="off"
+            autofocus
+            bind:value={pat}
+            disabled={busy}
+            placeholder="ghp_… / glpat-… / ATATT…"
+            onkeydown={(e) => {
+              if (e.key === 'Enter') confirm();
+            }}
+          />
+          <p class="hint">{t('clone.patHint')}</p>
+        </div>
+      {/if}
     </div>
 
     {#if busy}
@@ -154,8 +152,8 @@
       <button class="ghost" onclick={onCancel} disabled={busy}
         >{t('common.cancel')}</button
       >
-      <button class="primary" onclick={clone} disabled={!ready}>
-        {busy ? '…' : t('common.create')}
+      <button class="primary" onclick={confirm} disabled={!ready}>
+        {busy ? '…' : t('common.confirm')}
       </button>
     </div>
   </div>
@@ -199,7 +197,7 @@
     font-size: 12px;
     color: var(--fg-soft);
   }
-  input {
+  .field input {
     height: 30px;
     border: 1px solid var(--panel-border);
     border-radius: 8px;
@@ -207,20 +205,44 @@
     font: inherit;
     font-size: 13px;
   }
-  .row {
+  .check {
     display: flex;
-    gap: 6px;
-  }
-  .row input {
-    flex: 1;
-  }
-  .browse {
-    width: 34px;
-    border: 1px solid var(--panel-border);
-    border-radius: 8px;
-    background: var(--row-hover);
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: var(--fg);
     cursor: pointer;
-    font-size: 14px;
+    user-select: none;
+  }
+  .check input {
+    margin: 0;
+    accent-color: var(--select-ring);
+  }
+  .pat {
+    margin-bottom: 14px;
+  }
+  .pat-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font: inherit;
+    font-size: 12px;
+    color: var(--fg-soft);
+    cursor: pointer;
+  }
+  .pat-toggle:hover:not(:disabled) {
+    color: var(--fg);
+  }
+  .chev {
+    width: 10px;
+    font-size: 10px;
+  }
+  .pat-body {
+    margin: 8px 0 0;
   }
   .hint {
     margin: 2px 0 0;

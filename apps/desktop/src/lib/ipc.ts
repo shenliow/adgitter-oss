@@ -757,13 +757,15 @@ export type CloneAuth =
   | { kind: "password"; username: string; password: string }
   | { kind: "ssh"; username: string; key_path: string; passphrase?: string };
 
-/** Clone `url` into `dest`. Progress arrives via `onCloneProgress`. */
+/** Clone `url` into `dest`. Progress arrives via `onCloneProgress`.
+ *  `recursive` also checks out every submodule (`git clone --recursive`). */
 export async function cloneRepository(
   url: string,
   dest: string,
   auth: CloneAuth = { kind: "none" },
+  recursive = false,
 ): Promise<void> {
-  return invoke<void>("clone_repository", { url, dest, auth });
+  return invoke<void>("clone_repository", { url, dest, auth, recursive });
 }
 
 export interface CloneProgress {
