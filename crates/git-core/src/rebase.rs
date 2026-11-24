@@ -158,7 +158,7 @@ fn apply_step<'r>(
         return Ok(StepResult::Applied);
     }
     if matches!(step.action, RebaseAction::Squash | RebaseAction::Fixup) && !cursor.picked_any {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "squash/fixup needs a preceding pick".into(),
         ));
     }
@@ -429,7 +429,7 @@ pub fn drop_commit(repo_path: PathBuf, sha: String) -> AdgitterResult<HistoryOpR
     let target_id = target.id();
     let parent = target
         .parent(0)
-        .map_err(|_| AdgitterError::Internal("cannot drop the root commit".into()))?;
+        .map_err(|_| AdgitterError::InvalidOperation("cannot drop the root commit".into()))?;
     let head = repo.head()?.peel_to_commit()?;
     let steps = pick_steps(&repo, parent.id(), head.id(), |oid| {
         if oid == target_id {
@@ -468,7 +468,7 @@ pub fn squash_range(
     let repo = open_repo(&repo_path)?;
 
     if shas.len() < 2 {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "select at least two commits to squash".into(),
         ));
     }
@@ -479,7 +479,7 @@ pub fn squash_range(
     }
     let selected_set: std::collections::HashSet<Oid> = selected.into_iter().collect();
     if selected_set.len() < 2 {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "select at least two distinct commits to squash".into(),
         ));
     }
@@ -487,12 +487,12 @@ pub fn squash_range(
     for &oid in &selected_set {
         let commit = repo.find_commit(oid)?;
         if commit.parent_count() > 1 {
-            return Err(AdgitterError::Internal(
+            return Err(AdgitterError::InvalidOperation(
                 "cannot squash a range containing a merge commit".into(),
             ));
         }
         if commit.parent_count() == 0 {
-            return Err(AdgitterError::Internal(
+            return Err(AdgitterError::InvalidOperation(
                 "cannot squash a range containing the root commit".into(),
             ));
         }
@@ -515,7 +515,7 @@ pub fn squash_range(
         match index_of.get(&oid) {
             Some(&i) => indices.push(i),
             None => {
-                return Err(AdgitterError::Internal(
+                return Err(AdgitterError::InvalidOperation(
                     "selection is not on the current branch".into(),
                 ));
             }
@@ -525,7 +525,7 @@ pub fn squash_range(
     let newest_idx = indices[0];
     let oldest_idx = *indices.last().expect("checked len >= 2 above");
     if oldest_idx - newest_idx + 1 != indices.len() {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "selected commits are not a contiguous range".into(),
         ));
     }
@@ -632,13 +632,15 @@ pub fn rebase_branch(
     let (original_full, target_full) = {
         let repo = open_repo(&repo_path)?;
         let original_full = current_branch(&repo).map_err(|_| {
-            AdgitterError::Internal(
+            AdgitterError::InvalidOperation(
                 "cannot rebase a branch while HEAD is detached — check out a branch first".into(),
             )
         })?;
         let target_full = repo
             .find_branch(&branch, BranchType::Local)
-            .map_err(|_| AdgitterError::Internal(format!("unknown local branch: {branch}")))?
+            .map_err(|_| {
+                AdgitterError::InvalidOperation(format!("unknown local branch: {branch}"))
+            })?
             .get()
             .name()
             .map(str::to_string)
@@ -1167,7 +1169,7 @@ mod tests {
         assert!(repo.head_detached().unwrap());
 
         let err = rebase_branch(p.into(), main, "HEAD".into()).unwrap_err();
-        assert!(matches!(err, AdgitterError::Internal(_)));
+        assert!(matches!(err, AdgitterError::InvalidOperation(_)));
     }
 
     /// Commit `content` to `name` with an explicit `author` signature (rather
@@ -1341,8 +1343,8 @@ mod tests {
 
         let err = squash_range(p.into(), vec![m1, merge_sha], "nope".into()).unwrap_err();
         match err {
-            AdgitterError::Internal(msg) => assert!(msg.contains("merge commit"), "{msg}"),
-            other => panic!("expected Internal, got {other:?}"),
+            AdgitterError::InvalidOperation(msg) => assert!(msg.contains("merge commit"), "{msg}"),
+            other => panic!("expected InvalidOperation, got {other:?}"),
         }
     }
 
@@ -1358,10 +1360,10 @@ mod tests {
 
         let err = squash_range(p.into(), vec![c1, c3], "x".into()).unwrap_err();
         match err {
-            AdgitterError::Internal(msg) => {
+            AdgitterError::InvalidOperation(msg) => {
                 assert!(msg.contains("not a contiguous range"), "{msg}")
             }
-            other => panic!("expected Internal, got {other:?}"),
+            other => panic!("expected InvalidOperation, got {other:?}"),
         }
     }
 
@@ -1375,8 +1377,8 @@ mod tests {
 
         let err = squash_range(p.into(), vec![c0, c1], "x".into()).unwrap_err();
         match err {
-            AdgitterError::Internal(msg) => assert!(msg.contains("root commit"), "{msg}"),
-            other => panic!("expected Internal, got {other:?}"),
+            AdgitterError::InvalidOperation(msg) => assert!(msg.contains("root commit"), "{msg}"),
+            other => panic!("expected InvalidOperation, got {other:?}"),
         }
     }
 
@@ -1388,7 +1390,7 @@ mod tests {
         let c0 = commit(p, "a.txt", "a");
 
         let err = squash_range(p.into(), vec![c0], "x".into()).unwrap_err();
-        assert!(matches!(err, AdgitterError::Internal(_)));
+        assert!(matches!(err, AdgitterError::InvalidOperation(_)));
     }
 
     #[test]
@@ -1409,10 +1411,10 @@ mod tests {
 
         let err = squash_range(p.into(), vec![c1, side_commit], "x".into()).unwrap_err();
         match err {
-            AdgitterError::Internal(msg) => {
+            AdgitterError::InvalidOperation(msg) => {
                 assert!(msg.contains("not on the current branch"), "{msg}")
             }
-            other => panic!("expected Internal, got {other:?}"),
+            other => panic!("expected InvalidOperation, got {other:?}"),
         }
     }
 

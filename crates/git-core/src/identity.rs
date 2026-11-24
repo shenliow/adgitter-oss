@@ -163,7 +163,7 @@ pub(crate) fn signature_for(repo: &Repository) -> AdgitterResult<git2::Signature
     if let Ok(sig) = repo.signature() {
         return Ok(sig);
     }
-    fallback_signature().ok_or_else(|| AdgitterError::Internal(NOT_CONFIGURED.into()))
+    fallback_signature().ok_or_else(|| AdgitterError::InvalidOperation(NOT_CONFIGURED.into()))
 }
 
 /// Like [`signature_for`] but yielding `None` instead of an error, for the

@@ -7,7 +7,14 @@
  * in any usable form. Hence the blanket assertion in every case below.
  */
 import { describe, it, expect } from "vitest";
-import { describeError, errorCode, errorReport } from "./errorReport";
+import {
+  describeError,
+  errorCode,
+  errorReport,
+  isExpectedError,
+  isNetworkFailure,
+} from "./errorReport";
+import { AuthError, ProviderError, RateLimitError } from "./http/transport";
 
 const OBJ = "[object Object]";
 
@@ -109,5 +116,58 @@ describe("errorCode / errorReport", () => {
       code: "GIT_ERROR",
       message: "GIT_ERROR: bad ref",
     });
+  });
+});
+
+describe("isExpectedError — explained to the user, never reported", () => {
+  it.each([
+    "AUTH_REQUIRED",
+    "AUTH_FAILED",
+    "PERMISSION_DENIED",
+    "REMOTE_NOT_FOUND",
+    "NETWORK_ERROR",
+    "PUSH_REJECTED",
+    "INVALID_OPERATION",
+    "LOCKED",
+    "UNCOMMITTED_CHANGES",
+    "FILE_ACCESS_DENIED",
+    "CONFLICT",
+    "NOT_SIGNED_IN",
+    "FEATURE_LOCKED",
+  ])("%s is expected", (code) => {
+    expect(isExpectedError({ code, message: "x" })).toBe(true);
+  });
+
+  it.each(["GIT_ERROR", "IO_ERROR", "INTERNAL_ERROR", "SOMETHING_NEW"])(
+    "%s is still reported",
+    (code) => {
+      expect(isExpectedError({ code, message: "x" })).toBe(false);
+    },
+  );
+
+  it("an untagged throw (a frontend bug) is reported", () => {
+    expect(isExpectedError(new Error("undefined is not a function"))).toBe(
+      false,
+    );
+    expect(isExpectedError("boom")).toBe(false);
+  });
+
+  it("a generic code whose text says the network is down is expected", () => {
+    const offline = {
+      code: "INTERNAL_ERROR",
+      message:
+        "license renew failed: error sending request for url (https://x/renew)",
+    };
+    expect(isNetworkFailure(offline)).toBe(true);
+    expect(isExpectedError(offline)).toBe(true);
+    expect(isExpectedError(new TypeError("Failed to fetch"))).toBe(true);
+  });
+
+  it("issue-tracker refusals are expected, a malformed request is not", () => {
+    expect(isExpectedError(new AuthError(401))).toBe(true);
+    expect(isExpectedError(new RateLimitError(429, null))).toBe(true);
+    expect(
+      isExpectedError(new ProviderError("validation", 422, "invalid request")),
+    ).toBe(false);
   });
 });

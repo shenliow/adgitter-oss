@@ -19,11 +19,11 @@ use crate::mutate::{create_backup, lock_mutations};
 /// Full ref name of the current branch, erroring on a detached/unborn HEAD.
 pub(crate) fn current_branch(repo: &Repository) -> AdgitterResult<String> {
     if repo.head_detached().unwrap_or(false) {
-        return Err(AdgitterError::Internal("HEAD is detached".into()));
+        return Err(AdgitterError::InvalidOperation("HEAD is detached".into()));
     }
     let head = repo
         .head()
-        .map_err(|_| AdgitterError::Internal("no current branch (unborn HEAD)".into()))?;
+        .map_err(|_| AdgitterError::InvalidOperation("no current branch (unborn HEAD)".into()))?;
     head.name()
         .map(str::to_string)
         .ok_or_else(|| AdgitterError::Internal("invalid HEAD reference".into()))
@@ -237,7 +237,7 @@ pub fn reword(
     let repo = open_repo(&repo_path)?;
     crate::resolve::ensure_not_paused(&repo)?;
     if message.trim().is_empty() {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "commit message must not be empty".into(),
         ));
     }
@@ -271,7 +271,7 @@ pub fn reword(
     // branch it lives on, so the user has to be standing on that branch.
     // (Same precondition, same wording style as `purge::range_inclusive`'s.)
     if !repo.graph_descendant_of(head.id(), target.id())? {
-        return Err(AdgitterError::Internal(format!(
+        return Err(AdgitterError::InvalidOperation(format!(
             "{} is not on the current branch ({}) — check out a branch that contains it, then \
              reword",
             target.id(),
@@ -280,9 +280,9 @@ pub fn reword(
     }
 
     // We already hold the lock, so call the engine's lock-free core directly.
-    let parent = target
-        .parent(0)
-        .map_err(|_| AdgitterError::Internal("cannot reword the root commit via rebase".into()))?;
+    let parent = target.parent(0).map_err(|_| {
+        AdgitterError::InvalidOperation("cannot reword the root commit via rebase".into())
+    })?;
     let target_id = target.id();
     let steps = crate::rebase::pick_steps(&repo, parent.id(), head.id(), |oid| {
         if oid == target_id {

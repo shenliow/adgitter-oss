@@ -162,7 +162,41 @@ export interface AdgitterError {
      * the replay engine refuses to flatten (e.g. rewording a commit only
      * reachable across a merge). Nothing was changed.
      */
-    | "MERGE_COMMIT_IN_RANGE";
+    | "MERGE_COMMIT_IN_RANGE"
+    /** Checking out `origin/x` found a local `x` that tracks something else. */
+    | "REMOTE_UPSTREAM_MISMATCH"
+    /** A request the repository's current state refuses (empty commit
+     *  message, push of a detached HEAD, …); `message` is the whole reason. */
+    | "INVALID_OPERATION"
+    /** The remote refused the push (non-fast-forward or a server hook). */
+    | "PUSH_REJECTED"
+    // libgit2 / file-system failures classified out of GIT_ERROR / IO_ERROR
+    // (`git_error_code` / `io_error_code` in crates/git-core/src/error.rs).
+    // All are environmental and expected: shown with a hint, never reported.
+    /** The remote wants credentials and none were given (no PAT / SSH key). */
+    | "AUTH_REQUIRED"
+    /** Credentials were sent and refused (expired or wrong token / key). */
+    | "AUTH_FAILED"
+    /** Authenticated, but not allowed (HTTP 403, read-only token, …). */
+    | "PERMISSION_DENIED"
+    /** The remote repository (or the named remote) does not exist. */
+    | "REMOTE_NOT_FOUND"
+    /** The host could not be reached (DNS, offline, TLS, 5xx, …). */
+    | "NETWORK_ERROR"
+    /** A `.lock` file is held — another Git process is running. */
+    | "LOCKED"
+    /** Local changes would be overwritten by the operation. */
+    | "UNCOMMITTED_CHANGES"
+    /** A branch / tag / file of that name already exists. */
+    | "ALREADY_EXISTS"
+    /** Not a valid branch / reference name. */
+    | "INVALID_NAME"
+    /** The OS refused to read or write a local file. */
+    | "FILE_ACCESS_DENIED"
+    /** A local file or folder is missing. */
+    | "FILE_NOT_FOUND"
+    /** The disk is full. */
+    | "DISK_FULL";
   message: string;
   /**
    * Set for the sha-carrying codes (`CONFLICT`, `MERGE_COMMIT_IN_RANGE`): the

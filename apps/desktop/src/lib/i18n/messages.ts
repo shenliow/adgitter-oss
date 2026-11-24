@@ -876,6 +876,33 @@ export const en = {
   "error.REMOTE_UPSTREAM_MISMATCH":
     "That local branch tracks a different remote branch",
   "error.MERGE_COMMIT_IN_RANGE": "Can't rewrite across a merge commit",
+  "error.INVALID_OPERATION": "Can't do that",
+  "error.PUSH_REJECTED":
+    "The remote rejected the push — pull its new commits first, then push again",
+  "error.AUTH_REQUIRED":
+    "This remote needs authentication. Add an access token in Settings → General → Access token (or in the clone dialog), or set up an SSH key.",
+  "error.AUTH_FAILED":
+    "The remote rejected your credentials. Check that the access token is correct, has not expired and has the needed scopes, or that your SSH key is registered with the host.",
+  "error.PERMISSION_DENIED":
+    "No permission for this remote — check that the access token can write to this repository",
+  "error.REMOTE_NOT_FOUND":
+    "Remote repository not found — check the remote URL (a private repository also looks like this to a token that can't see it)",
+  "error.NETWORK_ERROR":
+    "Couldn't reach the remote — check your internet connection, proxy or VPN, then try again",
+  "error.LOCKED":
+    "Another Git process is using this repository — wait for it to finish (or remove the stale .lock file), then try again",
+  "error.UNCOMMITTED_CHANGES":
+    "Your local changes would be overwritten — commit or stash them first",
+  "error.ALREADY_EXISTS": "That name already exists",
+  "error.INVALID_NAME": "Not a valid name",
+  "error.FILE_ACCESS_DENIED":
+    "Permission denied on a local file — check the folder's permissions",
+  "error.FILE_NOT_FOUND": "File or folder not found",
+  "error.DISK_FULL": "The disk is full. Free some space, then try again.",
+  "error.TRACKER_AUTH":
+    "The issue tracker rejected the access token. Check it in Settings → Issue Panel.",
+  "error.TRACKER_RATE_LIMIT":
+    "The issue tracker is limiting requests right now. Try again in a moment.",
   "error.conflict":
     "{short} conflicts with the target — resolve it manually or undo the operation.",
   // issue panel & lifecycle
@@ -1884,6 +1911,29 @@ const zhHant: Catalog = {
   "error.CONFLICT": "衝突",
   "error.REMOTE_UPSTREAM_MISMATCH": "該本地分支追蹤的是另一個遠端分支",
   "error.MERGE_COMMIT_IN_RANGE": "無法跨越合併提交改寫歷史",
+  "error.INVALID_OPERATION": "無法執行此操作",
+  "error.PUSH_REJECTED": "遠端拒絕了推送——請先拉取遠端的新提交，再重新推送",
+  "error.AUTH_REQUIRED":
+    "此遠端需要驗證。請在「設定 → 一般 → 存取權杖」（或複製對話框）填入存取權杖，或設定 SSH 金鑰。",
+  "error.AUTH_FAILED":
+    "遠端拒絕了你的憑證。請確認存取權杖正確、未過期且具備所需權限範圍，或確認 SSH 金鑰已在主機上註冊。",
+  "error.PERMISSION_DENIED":
+    "沒有此遠端的權限——請確認存取權杖可以寫入這個儲存庫",
+  "error.REMOTE_NOT_FOUND":
+    "找不到遠端儲存庫——請檢查遠端 URL（權杖無權讀取的私人儲存庫也會顯示此訊息）",
+  "error.NETWORK_ERROR":
+    "無法連線到遠端——請檢查網路連線、Proxy 或 VPN 後再試一次",
+  "error.LOCKED":
+    "另一個 Git 程序正在使用此儲存庫——請等它完成（或移除殘留的 .lock 檔）後再試一次",
+  "error.UNCOMMITTED_CHANGES": "本地變更將被覆寫——請先提交或暫存（stash）",
+  "error.ALREADY_EXISTS": "此名稱已存在",
+  "error.INVALID_NAME": "名稱無效",
+  "error.FILE_ACCESS_DENIED": "沒有本機檔案的存取權限——請檢查資料夾權限",
+  "error.FILE_NOT_FOUND": "找不到檔案或資料夾",
+  "error.DISK_FULL": "磁碟空間已滿。請釋出空間後再試一次。",
+  "error.TRACKER_AUTH":
+    "議題追蹤系統拒絕了存取權杖。請到「設定 → 議題面板」檢查。",
+  "error.TRACKER_RATE_LIMIT": "議題追蹤系統目前限制請求頻率。請稍後再試。",
   "error.conflict": "{short} 與目標衝突，請手動解決或復原此操作。",
   "toolbar.issues": "議題",
   "issue.search": "搜尋議題…",

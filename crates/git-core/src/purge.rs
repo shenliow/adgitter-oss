@@ -39,7 +39,7 @@ use crate::mutate::{create_backup, lock_mutations};
 /// "sha through tip" range for its inverse operation.
 pub(crate) fn range_inclusive(repo: &Repository, sha: Oid, tip: Oid) -> AdgitterResult<Vec<Oid>> {
     if sha != tip && !repo.graph_descendant_of(tip, sha).unwrap_or(false) {
-        return Err(AdgitterError::Internal(format!(
+        return Err(AdgitterError::InvalidOperation(format!(
             "{sha} is not an ancestor of the current branch tip"
         )));
     }
@@ -79,7 +79,7 @@ fn tree_without_path(
 ) -> AdgitterResult<Oid> {
     match tree.get_path(Path::new(path)) {
         Ok(entry) if entry.kind() == Some(ObjectType::Tree) => {
-            return Err(AdgitterError::Internal(format!(
+            return Err(AdgitterError::InvalidOperation(format!(
                 "{path} is a directory in commit {commit} — purge only supports \
                  a single file path, not a directory"
             )));
@@ -194,7 +194,7 @@ pub fn purge_path(
         }
     }
     if !touched {
-        return Err(AdgitterError::Internal(format!(
+        return Err(AdgitterError::InvalidOperation(format!(
             "{path} does not appear in any commit from {} to the branch tip",
             target.id()
         )));
@@ -462,7 +462,7 @@ mod tests {
         commit(p, "main-only.txt", "m");
 
         let err = purge_path(p.into(), off_branch, "secret.txt".into()).unwrap_err();
-        assert!(matches!(err, AdgitterError::Internal(_)));
+        assert!(matches!(err, AdgitterError::InvalidOperation(_)));
         assert!(
             list_backups(&repo).unwrap().is_empty(),
             "a rejected precondition leaves no backup"
@@ -479,7 +479,7 @@ mod tests {
         commit(p, "b.txt", "2");
 
         let err = purge_path(p.into(), sha, "nope.txt".into()).unwrap_err();
-        assert!(matches!(err, AdgitterError::Internal(_)));
+        assert!(matches!(err, AdgitterError::InvalidOperation(_)));
         assert!(list_backups(&repo).unwrap().is_empty());
     }
 
@@ -493,7 +493,7 @@ mod tests {
         let sha = commit(p, "secrets/api_key.txt", "sk");
 
         let err = purge_path(p.into(), sha, "secrets".into()).unwrap_err();
-        assert!(matches!(err, AdgitterError::Internal(_)));
+        assert!(matches!(err, AdgitterError::InvalidOperation(_)));
         assert!(list_backups(&repo).unwrap().is_empty());
     }
 

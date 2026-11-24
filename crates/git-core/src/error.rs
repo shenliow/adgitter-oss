@@ -22,6 +22,25 @@ pub enum AdgitterError {
     #[error("internal error: {0}")]
     Internal(String),
 
+    /// The user asked for something the repository's current state does not
+    /// allow — an empty commit message, squashing a single commit, pushing a
+    /// detached HEAD, deleting the checked-out branch, … The message is the
+    /// complete, user-facing reason.
+    ///
+    /// Deliberately not `Internal`: these refusals are *expected* outcomes of
+    /// ordinary use, not faults, so the frontend shows them and does not file
+    /// a crash report for them. `Internal` stays reserved for states the code
+    /// itself believes are impossible.
+    #[error("{0}")]
+    InvalidOperation(String),
+
+    /// The remote refused a push because it holds commits the local branch
+    /// does not (non-fast-forward, or a server-side hook rejection). Expected
+    /// and recoverable — pull, then push again — so it has its own code
+    /// instead of `Internal`.
+    #[error("push rejected ({0}) — pull first, then push again")]
+    PushRejected(String),
+
     /// A paid feature was invoked without a license that grants it.
     /// Carries the underlying reason so the UI can prompt an upgrade.
     ///
@@ -144,9 +163,11 @@ impl AdgitterError {
         match self {
             Self::RepoNotFound(_) => "REPO_NOT_FOUND",
             Self::InvalidPath(_) => "INVALID_PATH",
-            Self::Git(_) => "GIT_ERROR",
-            Self::Io(_) => "IO_ERROR",
+            Self::Git(e) => git_error_code(e),
+            Self::Io(e) => io_error_code(e),
             Self::Internal(_) => "INTERNAL_ERROR",
+            Self::InvalidOperation(_) => "INVALID_OPERATION",
+            Self::PushRejected(_) => "PUSH_REJECTED",
             Self::FeatureLocked(_) => "FEATURE_LOCKED",
             Self::LicenseDeviceMismatch => "LICENSE_DEVICE_MISMATCH",
             Self::LicenseExpired => "LICENSE_EXPIRED",
@@ -167,6 +188,144 @@ impl AdgitterError {
             Self::Conflict { sha } | Self::MergeCommitInRange { sha } => Some(sha),
             _ => None,
         }
+    }
+}
+
+/// Stable code for a libgit2 failure.
+///
+/// libgit2 reports every failure as one `git2::Error`, and `GIT_ERROR` used to
+/// be the code for all of them — so "you have no access token", "this host is
+/// unreachable" and a genuine bug all looked the same to the UI and to crash
+/// reporting. The *expected* ones (credentials, permissions, network, lock
+/// files, local changes in the way, …) are environmental: the user can fix
+/// them and a crash report cannot. They get their own codes so the frontend
+/// can say what to do and skip the report; whatever is left stays
+/// `GIT_ERROR`, which is still reported.
+///
+/// Classified from libgit2's `code`/`class` where it sets them, and from the
+/// message otherwise: the credential callback (`repo::credential_callback`)
+/// and libgit2's HTTP transport both report through plain-text errors with a
+/// generic code, so the text is the only signal there is.
+pub fn git_error_code(e: &git2::Error) -> &'static str {
+    use git2::{ErrorClass as Class, ErrorCode as Code};
+
+    let msg = e.message().to_ascii_lowercase();
+    let has = |needles: &[&str]| needles.iter().any(|n| msg.contains(n));
+    let network_class = matches!(
+        e.class(),
+        Class::Net | Class::Http | Class::Ssh | Class::Ssl | Class::Callback
+    );
+
+    // Credentials offered and refused. Checked before "required": libgit2's
+    // replay guard and an SSH key the server rejects both mean the credential
+    // was *sent*, so asking the user to add one would be wrong.
+    if has(&[
+        "authentication failed",
+        "authentication replays",
+        "failed to authenticate ssh session",
+        "permission denied (publickey",
+        "invalid username or password",
+        "bad credentials",
+        "invalid credentials",
+    ]) {
+        return "AUTH_FAILED";
+    }
+    // No credential at all: the PAT is not set (HTTPS), or no SSH key was
+    // found. Also libgit2's own wording when the server answers 401.
+    if has(&[
+        "authentication required",
+        "no ssh key available",
+        "no supported authentication method",
+        "pat authentication requires",
+        "status code: 401",
+    ]) {
+        return "AUTH_REQUIRED";
+    }
+    if e.code() == Code::Auth {
+        return "AUTH_FAILED";
+    }
+    // Authenticated but not allowed: a read-only token pushing, a 403, the
+    // PAT pinned to its host refusing a cross-host redirect.
+    if has(&[
+        "status code: 403",
+        "write access to repository not granted",
+        "refusing to send the access token",
+    ]) || (network_class && has(&["permission denied", "access denied", "forbidden"]))
+    {
+        return "PERMISSION_DENIED";
+    }
+    if has(&[
+        "status code: 404",
+        "repository not found",
+        "does not appear to be a git repository",
+        "remote url is missing",
+    ]) || (e.class() == Class::Config && e.code() == Code::NotFound && has(&["remote"]))
+    {
+        return "REMOTE_NOT_FOUND";
+    }
+    if e.code() == Code::NotFastForward || has(&["non-fast-forward", "non-fastforwardable"]) {
+        return "PUSH_REJECTED";
+    }
+    if e.code() == Code::Certificate
+        || network_class
+        || has(&[
+            "failed to resolve address",
+            "could not resolve",
+            "failed to connect",
+            "connection refused",
+            "connection reset",
+            "connection timed out",
+            "timed out",
+            "network is unreachable",
+            "unexpected http status code",
+            "ssl error",
+            "certificate",
+        ])
+    {
+        return "NETWORK_ERROR";
+    }
+    if e.code() == Code::Locked || has(&[".lock'", "index.lock", "failed to lock"]) {
+        return "LOCKED";
+    }
+    if matches!(e.code(), Code::Uncommitted | Code::Unmerged)
+        || (e.code() == Code::Conflict && e.class() == Class::Checkout)
+        || has(&["prevents checkout", "would be overwritten"])
+    {
+        return "UNCOMMITTED_CHANGES";
+    }
+    if e.code() == Code::Exists {
+        return "ALREADY_EXISTS";
+    }
+    if e.code() == Code::InvalidSpec
+        || has(&["is not a valid branch name", "not a valid reference name"])
+    {
+        return "INVALID_NAME";
+    }
+    if matches!(e.class(), Class::Os | Class::Filesystem)
+        && has(&[
+            "permission denied",
+            "access is denied",
+            "read-only file system",
+        ])
+    {
+        return "FILE_ACCESS_DENIED";
+    }
+    if has(&["no space left on device", "disk full", "not enough space"]) {
+        return "DISK_FULL";
+    }
+    "GIT_ERROR"
+}
+
+/// Stable code for a file-system failure — the same split as
+/// [`git_error_code`]: a permission problem, a missing file or a full disk is
+/// the user's environment, not a fault.
+pub fn io_error_code(e: &std::io::Error) -> &'static str {
+    use std::io::ErrorKind as Kind;
+    match e.kind() {
+        Kind::PermissionDenied | Kind::ReadOnlyFilesystem => "FILE_ACCESS_DENIED",
+        Kind::NotFound => "FILE_NOT_FOUND",
+        Kind::StorageFull | Kind::QuotaExceeded => "DISK_FULL",
+        _ => "IO_ERROR",
     }
 }
 
@@ -314,6 +473,216 @@ mod tests {
         assert!(msg.contains("feature"), "{msg}");
         assert!(msg.contains("upstream/feature"), "{msg}");
         assert!(msg.contains("origin/feature"), "{msg}");
+    }
+
+    fn git_err(code: git2::ErrorCode, class: git2::ErrorClass, msg: &str) -> AdgitterError {
+        AdgitterError::Git(git2::Error::new(code, class, msg))
+    }
+
+    /// The expected remote failures — no token, a rejected token, no access,
+    /// a missing repository, no network — each get their own code, so the UI
+    /// can tell the user what to fix and crash reporting can skip them.
+    #[test]
+    fn remote_failures_are_classified_out_of_git_error() {
+        use git2::{ErrorClass as C, ErrorCode as K};
+        let cases = [
+            // repo::credential_callback's own refusals (generic code, no class)
+            (
+                git_err(K::GenericError, C::None, "authentication required"),
+                "AUTH_REQUIRED",
+            ),
+            (
+                git_err(
+                    K::GenericError,
+                    C::None,
+                    "no SSH key available (agent and default key files exhausted)",
+                ),
+                "AUTH_REQUIRED",
+            ),
+            (
+                git_err(K::GenericError, C::None, "authentication failed"),
+                "AUTH_FAILED",
+            ),
+            // libgit2's own wording
+            (
+                git_err(
+                    K::Auth,
+                    C::Http,
+                    "remote authentication required but no callback set",
+                ),
+                "AUTH_REQUIRED",
+            ),
+            (
+                git_err(
+                    K::Auth,
+                    C::Http,
+                    "too many redirects or authentication replays",
+                ),
+                "AUTH_FAILED",
+            ),
+            (
+                git_err(
+                    K::GenericError,
+                    C::Ssh,
+                    "Failed to authenticate SSH session: x",
+                ),
+                "AUTH_FAILED",
+            ),
+            (
+                git_err(K::GenericError, C::Http, "unexpected http status code: 403"),
+                "PERMISSION_DENIED",
+            ),
+            (
+                git_err(
+                    K::GenericError,
+                    C::None,
+                    "refusing to send the access token to a different host",
+                ),
+                "PERMISSION_DENIED",
+            ),
+            (
+                git_err(K::GenericError, C::Http, "unexpected http status code: 404"),
+                "REMOTE_NOT_FOUND",
+            ),
+            (
+                git_err(K::NotFound, C::Config, "remote 'origin' does not exist"),
+                "REMOTE_NOT_FOUND",
+            ),
+            (
+                git_err(
+                    K::GenericError,
+                    C::Net,
+                    "failed to resolve address for x: Name or service not known",
+                ),
+                "NETWORK_ERROR",
+            ),
+            (
+                git_err(K::GenericError, C::Http, "unexpected http status code: 502"),
+                "NETWORK_ERROR",
+            ),
+            (
+                git_err(K::Certificate, C::Ssl, "the SSL certificate is invalid"),
+                "NETWORK_ERROR",
+            ),
+            (
+                git_err(
+                    K::NotFastForward,
+                    C::Reference,
+                    "cannot push non-fastforwardable reference",
+                ),
+                "PUSH_REJECTED",
+            ),
+        ];
+        for (err, want) in cases {
+            assert_eq!(err.code(), want, "{err}");
+        }
+    }
+
+    /// Local, environmental failures the user can fix are classified too.
+    #[test]
+    fn local_environment_failures_are_classified_out_of_git_and_io_error() {
+        use git2::{ErrorClass as C, ErrorCode as K};
+        let cases = [
+            (
+                git_err(
+                    K::Locked,
+                    C::Index,
+                    "the index is locked; this might be due to a concurrent or crashed process",
+                ),
+                "LOCKED",
+            ),
+            (
+                git_err(
+                    K::GenericError,
+                    C::Os,
+                    "failed to create locked file '/r/.git/index.lock': File exists",
+                ),
+                "LOCKED",
+            ),
+            (
+                git_err(K::Conflict, C::Checkout, "1 conflict prevents checkout"),
+                "UNCOMMITTED_CHANGES",
+            ),
+            (
+                git_err(
+                    K::Exists,
+                    C::Reference,
+                    "a reference with that name already exists",
+                ),
+                "ALREADY_EXISTS",
+            ),
+            (
+                git_err(
+                    K::InvalidSpec,
+                    C::Reference,
+                    "'a..b' is not a valid branch name",
+                ),
+                "INVALID_NAME",
+            ),
+            (
+                git_err(
+                    K::GenericError,
+                    C::Os,
+                    "failed to make directory '/x/y': Permission denied",
+                ),
+                "FILE_ACCESS_DENIED",
+            ),
+            (
+                AdgitterError::Io(std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+                "FILE_ACCESS_DENIED",
+            ),
+            (
+                AdgitterError::Io(std::io::Error::from(std::io::ErrorKind::NotFound)),
+                "FILE_NOT_FOUND",
+            ),
+            (
+                AdgitterError::Io(std::io::Error::from(std::io::ErrorKind::StorageFull)),
+                "DISK_FULL",
+            ),
+        ];
+        for (err, want) in cases {
+            assert_eq!(err.code(), want, "{err}");
+        }
+    }
+
+    /// Whatever is not recognisably environmental stays `GIT_ERROR` /
+    /// `IO_ERROR`, which the frontend still reports: classifying must never
+    /// swallow a genuine fault.
+    #[test]
+    fn unrecognised_failures_keep_the_reportable_codes() {
+        use git2::{ErrorClass as C, ErrorCode as K};
+        assert_eq!(
+            git_err(
+                K::GenericError,
+                C::Odb,
+                "object not found - no match for id"
+            )
+            .code(),
+            "GIT_ERROR"
+        );
+        assert_eq!(
+            git_err(K::GenericError, C::Os, "permission denied").code(),
+            "FILE_ACCESS_DENIED",
+            "a local permission problem is the file system, not the remote"
+        );
+        assert_eq!(
+            AdgitterError::Io(std::io::Error::other("boom")).code(),
+            "IO_ERROR"
+        );
+    }
+
+    #[test]
+    fn refusals_and_push_rejections_have_their_own_codes() {
+        let refused = AdgitterError::InvalidOperation("nothing to amend".into());
+        assert_eq!(refused.code(), "INVALID_OPERATION");
+        assert_eq!(
+            refused.to_string(),
+            "nothing to amend",
+            "message is shown verbatim"
+        );
+        let rejected = AdgitterError::PushRejected("refs/heads/main: fetch first".into());
+        assert_eq!(rejected.code(), "PUSH_REJECTED");
+        assert!(rejected.to_string().contains("pull first"));
     }
 
     #[test]

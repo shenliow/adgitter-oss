@@ -72,7 +72,7 @@ pub fn delete_branch(repo_path: PathBuf, name: String) -> AdgitterResult<()> {
     let repo = open_repo(&repo_path)?;
     let mut branch = repo.find_branch(&name, BranchType::Local)?;
     if branch.is_head() {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "cannot delete the currently checked-out branch".into(),
         ));
     }
@@ -213,7 +213,9 @@ pub fn inspect_remote_checkout(
     let repo = open_repo(&repo_path)?;
     let remote_oid = repo
         .find_branch(&remote_name, BranchType::Remote)
-        .map_err(|_| AdgitterError::Internal(format!("unknown remote branch: {remote_name}")))?
+        .map_err(|_| {
+            AdgitterError::InvalidOperation(format!("unknown remote branch: {remote_name}"))
+        })?
         .get()
         .peel_to_commit()?
         .id();
@@ -283,7 +285,7 @@ pub fn adopt_remote_upstream_and_checkout(
         // else has already returned `RemoteUpstreamMismatch` above.
         RemoteCheckoutPlan::AdoptUpstream { .. } | RemoteCheckoutPlan::Checkout { .. } => {}
         RemoteCheckoutPlan::CreateLocal { .. } => {
-            return Err(AdgitterError::Internal(format!(
+            return Err(AdgitterError::InvalidOperation(format!(
                 "no local branch named '{local_name}' to adopt an upstream for"
             )))
         }
@@ -312,10 +314,10 @@ pub fn checkout_remote_branch(
         let remote_branch = repo
             .find_branch(&remote_name, BranchType::Remote)
             .map_err(|_| {
-                AdgitterError::Internal(format!("unknown remote branch: {remote_name}"))
+                AdgitterError::InvalidOperation(format!("unknown remote branch: {remote_name}"))
             })?;
         if repo.find_branch(&local_name, BranchType::Local).is_ok() {
-            return Err(AdgitterError::Internal(format!(
+            return Err(AdgitterError::InvalidOperation(format!(
                 "a local branch named '{local_name}' already exists"
             )));
         }
@@ -463,7 +465,7 @@ mod tests {
         let current = head_branch(&repo);
         assert!(matches!(
             delete_branch(p.into(), current),
-            Err(AdgitterError::Internal(_))
+            Err(AdgitterError::InvalidOperation(_))
         ));
     }
 
@@ -881,7 +883,7 @@ mod tests {
 
         assert!(matches!(
             adopt_remote_upstream_and_checkout(p.into(), "origin/feature".into(), "feature".into()),
-            Err(AdgitterError::Internal(_))
+            Err(AdgitterError::InvalidOperation(_))
         ));
         assert!(repo.find_branch("feature", BranchType::Local).is_err());
     }

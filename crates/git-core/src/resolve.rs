@@ -316,7 +316,7 @@ pub(crate) fn read_paused(repo: &Repository) -> Option<PausedOp> {
 /// resolution.
 pub(crate) fn ensure_not_paused(repo: &Repository) -> AdgitterResult<()> {
     if read_paused(repo).is_some() {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "an operation is waiting for conflict resolution".into(),
         ));
     }
@@ -407,10 +407,10 @@ pub fn continue_op(repo_path: PathBuf) -> AdgitterResult<HistoryOpResult> {
     let _lock = lock_mutations();
     let repo = open_repo(&repo_path)?;
     let paused = read_paused(&repo).ok_or_else(|| {
-        AdgitterError::Internal("no operation is waiting for conflict resolution".into())
+        AdgitterError::InvalidOperation("no operation is waiting for conflict resolution".into())
     })?;
     if repo.index()?.has_conflicts() {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "unresolved conflicts remain — stage every conflicted file first".into(),
         ));
     }
@@ -607,7 +607,7 @@ pub fn abort_op(repo_path: PathBuf) -> AdgitterResult<()> {
     let _lock = lock_mutations();
     let repo = open_repo(&repo_path)?;
     let paused = read_paused(&repo).ok_or_else(|| {
-        AdgitterError::Internal("no operation is waiting for conflict resolution".into())
+        AdgitterError::InvalidOperation("no operation is waiting for conflict resolution".into())
     })?;
     repo.cleanup_state()?;
     match &paused {
@@ -1034,10 +1034,10 @@ mod tests {
 
         let err = continue_op(p.into()).unwrap_err();
         match err {
-            AdgitterError::Internal(msg) => {
+            AdgitterError::InvalidOperation(msg) => {
                 assert!(msg.contains("stage every conflicted file"), "{msg}")
             }
-            other => panic!("expected Internal, got {other:?}"),
+            other => panic!("expected InvalidOperation, got {other:?}"),
         }
         // Pause unchanged: still probeable, merge state still live.
         let state = conflict_state(p.into()).unwrap().expect("still paused");
@@ -1083,7 +1083,7 @@ mod tests {
         let (_main, _feature_tip, pre) = merge_conflict_fixture(p, &repo);
 
         let expect_blocked = |r: AdgitterResult<HistoryOpResult>| match r {
-            Err(AdgitterError::Internal(msg)) => {
+            Err(AdgitterError::InvalidOperation(msg)) => {
                 assert!(msg.contains("waiting for conflict resolution"), "{msg}")
             }
             other => panic!("expected the paused-op guard, got {other:?}"),
@@ -1093,13 +1093,13 @@ mod tests {
         expect_blocked(crate::history::reword(p.into(), pre.clone(), "x".into()));
 
         match crate::purge::purge_path(p.into(), pre.clone(), "a.txt".into()) {
-            Err(AdgitterError::Internal(msg)) => {
+            Err(AdgitterError::InvalidOperation(msg)) => {
                 assert!(msg.contains("waiting for conflict resolution"), "{msg}")
             }
             other => panic!("expected the paused-op guard, got {other:?}"),
         }
         match undo_last(p.into()) {
-            Err(AdgitterError::Internal(msg)) => {
+            Err(AdgitterError::InvalidOperation(msg)) => {
                 assert!(msg.contains("waiting for conflict resolution"), "{msg}")
             }
             other => panic!("expected the paused-op guard, got {other:?}"),
@@ -1219,11 +1219,11 @@ mod tests {
             abort_op(p.into()).unwrap_err(),
         ] {
             match err {
-                AdgitterError::Internal(msg) => assert!(
+                AdgitterError::InvalidOperation(msg) => assert!(
                     msg.contains("no operation is waiting for conflict resolution"),
                     "{msg}"
                 ),
-                other => panic!("expected Internal, got {other:?}"),
+                other => panic!("expected InvalidOperation, got {other:?}"),
             }
         }
     }

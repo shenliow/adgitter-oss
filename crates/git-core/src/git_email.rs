@@ -70,7 +70,7 @@ pub fn write_git_email(
     match scope {
         GitEmailScope::Global => {
             let path = global_config_path().ok_or_else(|| {
-                AdgitterError::Internal("cannot locate the global git config".into())
+                AdgitterError::InvalidOperation("cannot locate the global git config".into())
             })?;
             write_key_at(&path, EMAIL_KEY, email.as_deref())
         }
@@ -94,7 +94,7 @@ pub fn write_git_name(
     match scope {
         GitEmailScope::Global => {
             let path = global_config_path().ok_or_else(|| {
-                AdgitterError::Internal("cannot locate the global git config".into())
+                AdgitterError::InvalidOperation("cannot locate the global git config".into())
             })?;
             write_key_at(&path, NAME_KEY, name.as_deref())
         }
@@ -122,7 +122,7 @@ fn normalize_email(email: Option<String>) -> AdgitterResult<Option<String>> {
         && e.split_once('@')
             .is_some_and(|(local, domain)| !local.is_empty() && !domain.is_empty());
     if !valid {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "invalid email address: expected local@domain".into(),
         ));
     }
@@ -138,7 +138,7 @@ fn normalize_name(name: Option<String>) -> AdgitterResult<Option<String>> {
     if n.chars()
         .any(|c| matches!(c, '<' | '>' | '\n' | '\r' | '\0'))
     {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "invalid Git name: angle brackets and control characters are not allowed".into(),
         ));
     }

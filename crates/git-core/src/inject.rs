@@ -148,22 +148,24 @@ pub fn add_file_to_commit(
 
     let workdir = repo
         .workdir()
-        .ok_or_else(|| AdgitterError::Internal("cannot add a file in a bare repository".into()))?
+        .ok_or_else(|| {
+            AdgitterError::InvalidOperation("cannot add a file in a bare repository".into())
+        })?
         .to_path_buf();
     let full_path = workdir.join(&path);
     if !full_path.exists() {
-        return Err(AdgitterError::Internal(format!(
+        return Err(AdgitterError::InvalidOperation(format!(
             "{path} does not exist in the working tree"
         )));
     }
     if full_path.is_dir() {
-        return Err(AdgitterError::Internal(format!(
+        return Err(AdgitterError::InvalidOperation(format!(
             "{path} is a directory in the working tree — add_file_to_commit only \
              supports a single file path, not a directory"
         )));
     }
     if !full_path.is_file() {
-        return Err(AdgitterError::Internal(format!(
+        return Err(AdgitterError::InvalidOperation(format!(
             "{path} is not a regular file"
         )));
     }
@@ -662,7 +664,7 @@ mod tests {
 
         std::fs::write(p.join("injected.txt"), "hello").unwrap();
         let err = add_file_to_commit(p.into(), off_branch, "injected.txt".into()).unwrap_err();
-        assert!(matches!(err, AdgitterError::Internal(_)));
+        assert!(matches!(err, AdgitterError::InvalidOperation(_)));
         assert!(
             list_backups(&repo).unwrap().is_empty(),
             "a rejected precondition leaves no backup"
@@ -678,7 +680,7 @@ mod tests {
         let sha = commit(p, "a.txt", "1");
 
         let err = add_file_to_commit(p.into(), sha, "missing.txt".into()).unwrap_err();
-        assert!(matches!(err, AdgitterError::Internal(_)));
+        assert!(matches!(err, AdgitterError::InvalidOperation(_)));
         assert!(list_backups(&repo).unwrap().is_empty());
     }
 
@@ -693,7 +695,7 @@ mod tests {
         std::fs::write(p.join("adir").join("f.txt"), "x").unwrap();
 
         let err = add_file_to_commit(p.into(), sha, "adir".into()).unwrap_err();
-        assert!(matches!(err, AdgitterError::Internal(_)));
+        assert!(matches!(err, AdgitterError::InvalidOperation(_)));
         assert!(list_backups(&repo).unwrap().is_empty());
     }
 

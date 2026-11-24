@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { localizedError } from "./errors";
 import { setLocale } from "./index.svelte";
 import { catalogs, en } from "./messages";
+import { AuthError } from "../http/transport";
 
 beforeEach(() => setLocale("en"));
 
@@ -157,4 +158,44 @@ describe("every error code is translated in every catalog", () => {
       }
     });
   }
+});
+
+describe("localizedError — hints for expected failures", () => {
+  it("a missing token is the complete instruction, without the raw libgit2 text", () => {
+    const e = {
+      code: "AUTH_REQUIRED",
+      message: "git error: authentication required",
+    };
+    expect(localizedError(e)).toBe(en["error.AUTH_REQUIRED"]);
+    setLocale("zh-Hant");
+    expect(localizedError(e)).toBe(
+      (catalogs["zh-Hant"] as Record<string, string>)["error.AUTH_REQUIRED"],
+    );
+  });
+
+  it("keeps the server's detail where it helps (which ref, which status)", () => {
+    expect(
+      localizedError({
+        code: "PUSH_REJECTED",
+        message: "push rejected (refs/heads/main: protected branch)",
+      }),
+    ).toBe(
+      `${en["error.PUSH_REJECTED"]}: push rejected (refs/heads/main: protected branch)`,
+    );
+  });
+
+  it("reads an offline INTERNAL_ERROR as the network hint", () => {
+    expect(
+      localizedError({
+        code: "INTERNAL_ERROR",
+        message: "trial request failed: error sending request",
+      }),
+    ).toBe(
+      `${en["error.NETWORK_ERROR"]}: trial request failed: error sending request`,
+    );
+  });
+
+  it("an issue tracker rejecting the token points at its settings", () => {
+    expect(localizedError(new AuthError(401))).toBe(en["error.TRACKER_AUTH"]);
+  });
 });

@@ -60,6 +60,7 @@
     tutorialDemoRemove,
     initCrashReporting,
     reportEvent,
+    isAdgitterError,
     type Commit,
     type RefList,
     type FileChange,
@@ -129,7 +130,7 @@
   import { setLocale, t } from './lib/i18n/index.svelte';
   import { localizedError } from './lib/i18n/errors';
   import { configureTelemetry, report, type Transport } from './lib/telemetry';
-  import { errorReport } from './lib/errorReport';
+  import { errorReport, isExpectedError } from './lib/errorReport';
   import {
     refreshEntitlement,
     hasFeature,
@@ -672,13 +673,21 @@
     };
   });
 
-  /** Report a thrown value (consent-gated, scrubbed) with its error code. */
+  /** Report a thrown value (consent-gated, scrubbed) with its error code.
+   *
+   *  Expected failures — no access token, a rejected one, no permission, no
+   *  network, a lock file, a refused operation, … (`isExpectedError`) — are
+   *  NOT reported: the toast already tells the user what to do, and a crash
+   *  report about the user's own setup is noise that buries the real faults.
+   *  Only failures nothing explains (GIT_ERROR / IO_ERROR / INTERNAL_ERROR /
+   *  untagged throws) go to Sentry. */
   function reportFailure(e: unknown) {
+    if (isExpectedError(e)) return;
     const { code, message } = errorReport(e);
     report(code, message);
   }
 
-  /** Show a localized error toast and report it. */
+  /** Show a localized error toast and report it (unless expected). */
   function setError(e: unknown) {
     error = localizedError(e);
     reportFailure(e);
@@ -2453,9 +2462,10 @@
     }
   }
 
-  /** Best effort: was this push refused as a non-fast-forward? git-core
-   *  reports it as a generic GIT_ERROR, so this reads the message. */
+  /** Was this push refused as a non-fast-forward? git-core tags it
+   *  `PUSH_REJECTED`; the message test is the fallback for older backends. */
   function isPushRejection(e: unknown): boolean {
+    if (isAdgitterError(e) && e.code === 'PUSH_REJECTED') return true;
     const text =
       typeof e === 'object' && e !== null && 'message' in e
         ? String((e as { message: unknown }).message)
@@ -2834,11 +2844,28 @@
   // `{code, message}`), so describe *it* rather than stringifying it — see
   // `lib/errorReport`. `ErrorEvent.message` is only the fallback for events
   // with no `error` (cross-origin scripts).
+  //
+  // An EXPECTED failure that slipped past its call site's catch (a missing
+  // token, no network, …) is not a crash: it gets the same localized toast a
+  // caught one would, and neither a report nor the crash window — telling the
+  // user "ADGitter crashed" because they are offline would be both wrong and
+  // alarming.
   function onWindowError(e: ErrorEvent) {
-    reportFailure(e.error ?? e.message);
+    const thrown = e.error ?? e.message;
+    if (isExpectedError(thrown)) {
+      e.preventDefault();
+      error = localizedError(thrown);
+      return;
+    }
+    reportFailure(thrown);
     crash = { reported: settings.crashReports === 'granted' };
   }
   function onUnhandledRejection(e: PromiseRejectionEvent) {
+    if (isExpectedError(e.reason)) {
+      e.preventDefault();
+      error = localizedError(e.reason);
+      return;
+    }
     reportFailure(e.reason);
     crash = { reported: settings.crashReports === 'granted' };
   }

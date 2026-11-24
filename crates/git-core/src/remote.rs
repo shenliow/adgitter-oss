@@ -180,13 +180,13 @@ pub fn pull(
         let repo = open_repo(&repo_path)?;
         let head = repo.head()?;
         if !head.is_branch() {
-            return Err(AdgitterError::Internal(
+            return Err(AdgitterError::InvalidOperation(
                 "cannot pull onto a detached HEAD".into(),
             ));
         }
         let branch = Branch::wrap(head);
         let up = branch.upstream().map_err(|_| {
-            AdgitterError::Internal("no upstream branch is configured for pull".into())
+            AdgitterError::InvalidOperation("no upstream branch is configured for pull".into())
         })?;
         up.name()
             .ok()
@@ -225,7 +225,7 @@ pub fn push(
     let repo = open_repo(&repo_path)?;
     let head = repo.head()?;
     if !head.is_branch() {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "cannot push a detached HEAD".into(),
         ));
     }
@@ -237,7 +237,7 @@ pub fn push(
     // should carry once the server accepts the update.
     let pushed_oid = head
         .target()
-        .ok_or_else(|| AdgitterError::Internal("unborn branch cannot be pushed".into()))?;
+        .ok_or_else(|| AdgitterError::InvalidOperation("unborn branch cannot be pushed".into()))?;
 
     push_ref(&repo, remote, auth, force, url, refname, pushed_oid)
 }
@@ -261,7 +261,7 @@ pub fn push_branch(
         .to_string();
     let pushed_oid = reference
         .target()
-        .ok_or_else(|| AdgitterError::Internal("unborn branch cannot be pushed".into()))?;
+        .ok_or_else(|| AdgitterError::InvalidOperation("unborn branch cannot be pushed".into()))?;
     push_ref(&repo, remote, auth, false, url, refname, pushed_oid)
 }
 
@@ -308,9 +308,7 @@ fn push_ref(
     rmt.push(&[format!("{prefix}{refname}:{refname}")], Some(&mut po))?;
 
     if let Some(msg) = rejection.borrow().clone() {
-        return Err(AdgitterError::Internal(format!(
-            "push rejected ({msg}) — pull first, then push again"
-        )));
+        return Err(AdgitterError::PushRejected(msg));
     }
 
     // Advance `refs/remotes/<remote>/<branch>` ourselves. libgit2 runs its own

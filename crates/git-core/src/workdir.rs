@@ -145,7 +145,7 @@ pub fn stage(repo_path: PathBuf, paths: Vec<String>) -> AdgitterResult<()> {
     let repo = open_repo(&repo_path)?;
     let workdir = repo
         .workdir()
-        .ok_or_else(|| AdgitterError::Internal("cannot stage in a bare repository".into()))?
+        .ok_or_else(|| AdgitterError::InvalidOperation("cannot stage in a bare repository".into()))?
         .to_path_buf();
     let mut index = repo.index()?;
     for p in &paths {
@@ -217,7 +217,7 @@ pub fn commit(repo_path: PathBuf, message: String, amend: bool) -> AdgitterResul
     let _lock = lock_mutations();
     let repo = open_repo(&repo_path)?;
     if message.trim().is_empty() {
-        return Err(AdgitterError::Internal(
+        return Err(AdgitterError::InvalidOperation(
             "commit message must not be empty".into(),
         ));
     }
@@ -232,7 +232,7 @@ pub fn commit(repo_path: PathBuf, message: String, amend: bool) -> AdgitterResul
     let oid = if amend {
         let hc = head_commit
             .as_ref()
-            .ok_or_else(|| AdgitterError::Internal("nothing to amend".into()))?;
+            .ok_or_else(|| AdgitterError::InvalidOperation("nothing to amend".into()))?;
         // Rewriting the HEAD commit — snapshot the branch first so it is reversible.
         let backup = repo
             .head()
@@ -372,7 +372,7 @@ mod tests {
         stage(p.clone(), vec!["a.txt".into()]).unwrap();
         assert!(matches!(
             commit(p, "   ".into(), false),
-            Err(AdgitterError::Internal(_))
+            Err(AdgitterError::InvalidOperation(_))
         ));
     }
 

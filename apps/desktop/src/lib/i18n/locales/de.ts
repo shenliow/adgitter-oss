@@ -785,6 +785,34 @@ export const de: Catalog = {
     "Dieser lokale Branch verfolgt einen anderen Remote-Branch",
   "error.MERGE_COMMIT_IN_RANGE":
     "Umschreiben über einen Merge-Commit hinweg ist nicht möglich",
+  "error.INVALID_OPERATION": "Das ist nicht möglich",
+  "error.PUSH_REJECTED":
+    "Das Remote hat den Push abgelehnt — zuerst die neuen Commits pullen, dann erneut pushen",
+  "error.AUTH_REQUIRED":
+    "Dieses Remote erfordert eine Anmeldung. Hinterlegen Sie ein Zugriffstoken unter Einstellungen → Allgemein → Zugriffstoken (oder im Klonen-Dialog), oder richten Sie einen SSH-Schlüssel ein.",
+  "error.AUTH_FAILED":
+    "Das Remote hat Ihre Anmeldedaten abgelehnt. Prüfen Sie, ob das Zugriffstoken korrekt, nicht abgelaufen und mit den nötigen Berechtigungen versehen ist, oder ob Ihr SSH-Schlüssel beim Host registriert ist.",
+  "error.PERMISSION_DENIED":
+    "Keine Berechtigung für dieses Remote — prüfen Sie, ob das Zugriffstoken in dieses Repository schreiben darf",
+  "error.REMOTE_NOT_FOUND":
+    "Remote-Repository nicht gefunden — prüfen Sie die Remote-URL (ein privates Repository sieht für ein Token ohne Zugriff genauso aus)",
+  "error.NETWORK_ERROR":
+    "Remote nicht erreichbar — prüfen Sie Internetverbindung, Proxy oder VPN und versuchen Sie es erneut",
+  "error.LOCKED":
+    "Ein anderer Git-Prozess verwendet dieses Repository — warten Sie, bis er fertig ist (oder entfernen Sie die verwaiste .lock-Datei), und versuchen Sie es erneut",
+  "error.UNCOMMITTED_CHANGES":
+    "Ihre lokalen Änderungen würden überschrieben — committen oder stashen Sie sie zuerst",
+  "error.ALREADY_EXISTS": "Dieser Name existiert bereits",
+  "error.INVALID_NAME": "Kein gültiger Name",
+  "error.FILE_ACCESS_DENIED":
+    "Zugriff auf eine lokale Datei verweigert — prüfen Sie die Ordnerberechtigungen",
+  "error.FILE_NOT_FOUND": "Datei oder Ordner nicht gefunden",
+  "error.DISK_FULL":
+    "Der Datenträger ist voll. Geben Sie Speicherplatz frei und versuchen Sie es erneut.",
+  "error.TRACKER_AUTH":
+    "Der Issue-Tracker hat das Zugriffstoken abgelehnt. Prüfen Sie es unter Einstellungen → Issue-Panel.",
+  "error.TRACKER_RATE_LIMIT":
+    "Der Issue-Tracker begrenzt gerade die Anfragen. Versuchen Sie es gleich noch einmal.",
   "error.conflict":
     "{short} steht im Konflikt mit dem Ziel — löse ihn manuell oder mache die Operation rückgängig.",
   "toolbar.issues": "Issues",

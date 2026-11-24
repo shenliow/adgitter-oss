@@ -754,6 +754,34 @@ export const ko: Catalog = {
     "해당 로컬 브랜치는 다른 원격 브랜치를 추적합니다",
   "error.MERGE_COMMIT_IN_RANGE":
     "병합 커밋을 가로질러 히스토리를 다시 쓸 수 없습니다",
+  "error.INVALID_OPERATION": "이 작업을 수행할 수 없습니다",
+  "error.PUSH_REJECTED":
+    "원격이 푸시를 거부했습니다 — 먼저 원격의 새 커밋을 풀한 다음 다시 푸시하세요",
+  "error.AUTH_REQUIRED":
+    "이 원격은 인증이 필요합니다. '설정 → 일반 → 액세스 토큰'(또는 클론 대화상자)에 액세스 토큰을 입력하거나 SSH 키를 설정하세요.",
+  "error.AUTH_FAILED":
+    "원격이 자격 증명을 거부했습니다. 액세스 토큰이 올바르고 만료되지 않았으며 필요한 범위를 갖고 있는지, 또는 SSH 키가 호스트에 등록되어 있는지 확인하세요.",
+  "error.PERMISSION_DENIED":
+    "이 원격에 대한 권한이 없습니다 — 액세스 토큰이 이 저장소에 쓸 수 있는지 확인하세요",
+  "error.REMOTE_NOT_FOUND":
+    "원격 저장소를 찾을 수 없습니다 — 원격 URL을 확인하세요 (토큰이 볼 수 없는 비공개 저장소도 이렇게 표시됩니다)",
+  "error.NETWORK_ERROR":
+    "원격에 연결할 수 없습니다 — 인터넷 연결, 프록시 또는 VPN을 확인한 뒤 다시 시도하세요",
+  "error.LOCKED":
+    "다른 Git 프로세스가 이 저장소를 사용 중입니다 — 끝날 때까지 기다리거나 남은 .lock 파일을 삭제한 뒤 다시 시도하세요",
+  "error.UNCOMMITTED_CHANGES":
+    "로컬 변경 사항을 덮어쓰게 됩니다 — 먼저 커밋하거나 스태시하세요",
+  "error.ALREADY_EXISTS": "같은 이름이 이미 있습니다",
+  "error.INVALID_NAME": "올바른 이름이 아닙니다",
+  "error.FILE_ACCESS_DENIED":
+    "로컬 파일 접근이 거부되었습니다 — 폴더 권한을 확인하세요",
+  "error.FILE_NOT_FOUND": "파일 또는 폴더를 찾을 수 없습니다",
+  "error.DISK_FULL":
+    "디스크가 가득 찼습니다. 공간을 확보한 뒤 다시 시도하세요.",
+  "error.TRACKER_AUTH":
+    "이슈 트래커가 액세스 토큰을 거부했습니다. '설정 → 이슈 패널'에서 확인하세요.",
+  "error.TRACKER_RATE_LIMIT":
+    "이슈 트래커가 지금 요청을 제한하고 있습니다. 잠시 후 다시 시도하세요.",
   "error.conflict":
     "{short}가 대상과 충돌합니다 — 수동으로 해결하거나 작업을 취소하세요.",
   "toolbar.issues": "이슈",

@@ -73,14 +73,20 @@ function internal(message: string): Error {
   return adgitterError("INTERNAL_ERROR", `internal error: ${message}`);
 }
 
+/** `AdgitterError::InvalidOperation` — a refusal the user can act on. Its
+ *  `Display` text is the bare message (no "internal error:" prefix). */
+function refused(message: string): Error {
+  return adgitterError("INVALID_OPERATION", message);
+}
+
 /** Full ref name of the current branch; throws on a detached/unborn HEAD
  *  (`history.rs`'s `current_branch`). */
 export function currentBranch(repo: string): string {
   if (gitOrNull(repo, ["rev-parse", "--verify", "-q", "HEAD"]) === null) {
-    throw internal("no current branch (unborn HEAD)");
+    throw refused("no current branch (unborn HEAD)");
   }
   const ref = gitOrNull(repo, ["symbolic-ref", "-q", "HEAD"]);
-  if (!ref) throw internal("HEAD is detached");
+  if (!ref) throw refused("HEAD is detached");
   return ref;
 }
 
@@ -270,7 +276,7 @@ function treeWithoutPath(
   if (!entry) return tree; // absent from this tree: no-op
   const type = entry.split(/\s+/)[1];
   if (type === "tree") {
-    throw internal(
+    throw refused(
       `${path} is a directory in commit ${commit} — purge only supports a single file path, not a directory`,
     );
   }
@@ -633,7 +639,7 @@ function applyStep(repo: string, cursor: ReplayCursor, step: RebaseStep): void {
     (step.action === "squash" || step.action === "fixup") &&
     !cursor.pickedAny
   ) {
-    throw internal("squash/fixup needs a preceding pick");
+    throw refused("squash/fixup needs a preceding pick");
   }
   const commit = readCommit(repo, sha);
   if (commit.parents.length > 1) {
@@ -755,8 +761,7 @@ export function rebaseOnto(repo: string, onto: string): HistoryOpResult {
 /** Drop `sha` from the current branch, replaying its descendants without it. */
 export function dropCommit(repo: string, sha: string): HistoryOpResult {
   const target = readCommit(repo, resolveCommit(repo, sha));
-  if (target.parents.length === 0)
-    throw internal("cannot drop the root commit");
+  if (target.parents.length === 0) throw refused("cannot drop the root commit");
   const parent = target.parents[0];
   const head = resolveCommit(repo, "HEAD");
   const steps = pickSteps(repo, parent, head, (c) =>
@@ -776,7 +781,7 @@ export function rebaseBranch(
   try {
     original = currentBranch(repo);
   } catch {
-    throw internal(
+    throw refused(
       "cannot rebase a branch while HEAD is detached — check out a branch first",
     );
   }
@@ -786,7 +791,7 @@ export function rebaseBranch(
     "-q",
     `refs/heads/${branch}`,
   ]);
-  if (!target) throw internal(`unknown local branch: ${branch}`);
+  if (!target) throw refused(`unknown local branch: ${branch}`);
   if (`refs/heads/${branch}` === original) return rebaseOnto(repo, onto);
 
   const originalShort = stripHeads(original);
@@ -1017,7 +1022,7 @@ function remapDescendants(
 /** `sha` through `tip` inclusive, oldest first; `sha` must be on the tip. */
 function rangeInclusive(repo: string, sha: string, tip: string): string[] {
   if (sha !== tip && !isAncestor(repo, sha, tip)) {
-    throw internal(`${sha} is not an ancestor of the current branch tip`);
+    throw refused(`${sha} is not an ancestor of the current branch tip`);
   }
   const target = readCommit(repo, sha);
   return lines(
@@ -1068,7 +1073,7 @@ export function purgePath(
     (oid) => !!gitOrNull(repo, ["ls-tree", oid, "--", path]),
   );
   if (!touched) {
-    throw internal(
+    throw refused(
       `${path} does not appear in any commit from ${target} to the branch tip`,
     );
   }
@@ -1120,15 +1125,15 @@ export function addFileToCommit(
   const workdir = git(repo, ["rev-parse", "--show-toplevel"]).trim();
   const full = join(workdir, path);
   if (!existsSync(full)) {
-    throw internal(`${path} does not exist in the working tree`);
+    throw refused(`${path} does not exist in the working tree`);
   }
   const st = statSync(full);
   if (st.isDirectory()) {
-    throw internal(
+    throw refused(
       `${path} is a directory in the working tree — add_file_to_commit only supports a single file path, not a directory`,
     );
   }
-  if (!st.isFile()) throw internal(`${path} is not a regular file`);
+  if (!st.isFile()) throw refused(`${path} is not a regular file`);
 
   const range = rangeInclusive(repo, target, tip);
   // One blob shared by every rewritten tree; raw bytes (no clean filters).
@@ -1246,7 +1251,7 @@ export function reword(
   message: string,
 ): HistoryOpResult {
   if (message.trim().length === 0) {
-    throw internal("commit message must not be empty");
+    throw refused("commit message must not be empty");
   }
   const head = resolveCommit(repo, "HEAD");
   const target = resolveCommit(repo, sha);
@@ -1276,13 +1281,13 @@ export function reword(
   }
 
   if (!isAncestor(repo, target, head)) {
-    throw internal(
+    throw refused(
       `${target} is not on the current branch (${stripHeads(branch)}) — check out a branch that contains it, then reword`,
     );
   }
   const parents = readCommit(repo, target).parents;
   if (parents.length === 0) {
-    throw internal("cannot reword the root commit via rebase");
+    throw refused("cannot reword the root commit via rebase");
   }
   const steps = pickSteps(repo, parents[0], head, () => "pick").map((s) =>
     s.commit === target ? { ...s, action: "reword" as const, message } : s,
@@ -1323,7 +1328,9 @@ function pushRef(
       r.stdout ?? "",
     );
     if (rejected) {
-      throw internal(
+      // `AdgitterError::PushRejected` — its own code, not `INTERNAL_ERROR`.
+      throw adgitterError(
+        "PUSH_REJECTED",
         `push rejected (${refname}: ${rejected[1] ?? "rejected"}) — pull first, then push again`,
       );
     }
@@ -1351,7 +1358,7 @@ export function push(
   try {
     refname = currentBranch(repo);
   } catch {
-    throw internal("cannot push a detached HEAD");
+    throw refused("cannot push a detached HEAD");
   }
   pushRef(repo, remote, force, url, refname, resolveCommit(repo, "HEAD"));
 }
@@ -1365,7 +1372,7 @@ export function pushBranch(
 ): void {
   const refname = `refs/heads/${branch}`;
   const oid = gitOrNull(repo, ["rev-parse", "--verify", "-q", refname]);
-  if (!oid) throw internal(`unknown local branch: ${branch}`);
+  if (!oid) throw refused(`unknown local branch: ${branch}`);
   pushRef(repo, remote, false, url, refname, oid);
 }
 

@@ -710,6 +710,26 @@ export const zhHans: Catalog = {
   "error.CONFLICT": "冲突",
   "error.REMOTE_UPSTREAM_MISMATCH": "该本地分支跟踪的是另一个远程分支",
   "error.MERGE_COMMIT_IN_RANGE": "无法跨越合并提交改写历史",
+  "error.INVALID_OPERATION": "无法执行此操作",
+  "error.PUSH_REJECTED": "远程拒绝了推送——请先拉取远程的新提交，再重新推送",
+  "error.AUTH_REQUIRED":
+    "此远程需要认证。请在“设置 → 常规 → 访问令牌”（或克隆对话框）填写访问令牌，或配置 SSH 密钥。",
+  "error.AUTH_FAILED":
+    "远程拒绝了你的凭据。请确认访问令牌正确、未过期且具备所需权限范围，或确认 SSH 密钥已在主机上注册。",
+  "error.PERMISSION_DENIED": "没有此远程的权限——请确认访问令牌可以写入这个仓库",
+  "error.REMOTE_NOT_FOUND":
+    "找不到远程仓库——请检查远程 URL（令牌无权读取的私有仓库也会显示此信息）",
+  "error.NETWORK_ERROR": "无法连接到远程——请检查网络连接、代理或 VPN 后重试",
+  "error.LOCKED":
+    "另一个 Git 进程正在使用此仓库——请等待其完成（或删除残留的 .lock 文件）后重试",
+  "error.UNCOMMITTED_CHANGES": "本地更改将被覆盖——请先提交或储藏（stash）",
+  "error.ALREADY_EXISTS": "该名称已存在",
+  "error.INVALID_NAME": "名称无效",
+  "error.FILE_ACCESS_DENIED": "没有本地文件的访问权限——请检查文件夹权限",
+  "error.FILE_NOT_FOUND": "找不到文件或文件夹",
+  "error.DISK_FULL": "磁盘空间已满。请释放空间后重试。",
+  "error.TRACKER_AUTH": "工单系统拒绝了访问令牌。请在“设置 → 工单面板”中检查。",
+  "error.TRACKER_RATE_LIMIT": "工单系统当前正在限制请求频率。请稍后重试。",
   "error.conflict": "{short} 与目标存在冲突——请手动解决或撤销此操作。",
   "toolbar.issues": "工单",
   "issue.search": "搜索工单…",

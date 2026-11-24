@@ -777,6 +777,34 @@ export const fr: Catalog = {
     "Cette branche locale suit une autre branche distante",
   "error.MERGE_COMMIT_IN_RANGE":
     "Impossible de réécrire l'historique à travers un commit de fusion",
+  "error.INVALID_OPERATION": "Opération impossible",
+  "error.PUSH_REJECTED":
+    "Le dépôt distant a refusé le push — récupérez d'abord ses nouveaux commits (pull), puis poussez à nouveau",
+  "error.AUTH_REQUIRED":
+    "Ce dépôt distant demande une authentification. Ajoutez un jeton d'accès dans Réglages → Général → Jeton d'accès (ou dans la fenêtre de clonage), ou configurez une clé SSH.",
+  "error.AUTH_FAILED":
+    "Le dépôt distant a refusé vos identifiants. Vérifiez que le jeton d'accès est correct, n'a pas expiré et dispose des droits nécessaires, ou que votre clé SSH est enregistrée auprès de l'hébergeur.",
+  "error.PERMISSION_DENIED":
+    "Aucune autorisation sur ce dépôt distant — vérifiez que le jeton d'accès peut écrire dans ce dépôt",
+  "error.REMOTE_NOT_FOUND":
+    "Dépôt distant introuvable — vérifiez l'URL distante (un dépôt privé apparaît ainsi à un jeton qui n'y a pas accès)",
+  "error.NETWORK_ERROR":
+    "Impossible de joindre le dépôt distant — vérifiez votre connexion Internet, proxy ou VPN, puis réessayez",
+  "error.LOCKED":
+    "Un autre processus Git utilise ce dépôt — attendez qu'il se termine (ou supprimez le fichier .lock resté en place), puis réessayez",
+  "error.UNCOMMITTED_CHANGES":
+    "Vos modifications locales seraient écrasées — committez-les ou mettez-les de côté (stash) d'abord",
+  "error.ALREADY_EXISTS": "Ce nom existe déjà",
+  "error.INVALID_NAME": "Nom invalide",
+  "error.FILE_ACCESS_DENIED":
+    "Accès refusé à un fichier local — vérifiez les autorisations du dossier",
+  "error.FILE_NOT_FOUND": "Fichier ou dossier introuvable",
+  "error.DISK_FULL":
+    "Le disque est plein. Libérez de l'espace, puis réessayez.",
+  "error.TRACKER_AUTH":
+    "Le gestionnaire de tickets a refusé le jeton d'accès. Vérifiez-le dans Réglages → Panneau des tickets.",
+  "error.TRACKER_RATE_LIMIT":
+    "Le gestionnaire de tickets limite les requêtes en ce moment. Réessayez dans un instant.",
   "error.conflict":
     "{short} est en conflit avec la cible — résolvez-le manuellement ou annulez l'opération.",
   "toolbar.issues": "Tickets",
