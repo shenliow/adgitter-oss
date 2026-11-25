@@ -181,7 +181,9 @@ export interface AdgitterError {
     | "PERMISSION_DENIED"
     /** The remote repository (or the named remote) does not exist. */
     | "REMOTE_NOT_FOUND"
-    /** The host could not be reached (DNS, offline, TLS, 5xx, …). */
+    /** The host could not be reached (DNS, offline, TLS, timeout, …) — a
+     *  libgit2 transport, or one of the shell's own HTTP calls (licence,
+     *  trial, checkout, portal, sign-in probe; `http_error` in commands.rs). */
     | "NETWORK_ERROR"
     /** A `.lock` file is held — another Git process is running. */
     | "LOCKED"
@@ -1372,7 +1374,8 @@ export async function issueLicense(
  * after the fact; the stored license (our own signature, device-bound) is the
  * credential instead. Resolves the freshly verified entitlement DTO. Rejects
  * with an {@link AdgitterError}: `NOT_SIGNED_IN` when there is no license to
- * renew, otherwise `INTERNAL_ERROR` (network / rejected).
+ * renew, `NETWORK_ERROR` when the server could not be reached, otherwise
+ * `INTERNAL_ERROR` (rejected).
  *
  * **It is also the device-seat ping.** The server's renew path re-runs the seat
  * check, which bumps this device's `last_seen` — so the background renew the
@@ -1472,7 +1475,8 @@ export async function clerkPortalCapabilities(
  * subscription plan or a one-time theme; `id` is the tier / theme id. Rejects
  * with an {@link AdgitterError}: `NOT_SIGNED_IN` when there is no license yet
  * (recoverable — see `startCheckout` in `checkoutFlow.ts`, which signs in and
- * retries), otherwise `INTERNAL_ERROR` (Polar not provisioned / network).
+ * retries), `NETWORK_ERROR` when the server could not be reached, otherwise
+ * `INTERNAL_ERROR` (Polar not provisioned / rejected).
  */
 export async function createCheckout(
   kind: "plan" | "theme",
@@ -1498,8 +1502,8 @@ export async function createCheckout(
  * Rejects with an {@link AdgitterError}: `NOT_SIGNED_IN` when there is no
  * licence yet or the server rejected the one we have (recoverable — see
  * `startSubscriptionPortal` in `checkoutFlow.ts`, which signs in and retries),
- * `NO_SUBSCRIPTION` when the account has nothing to manage, otherwise
- * `INTERNAL_ERROR`.
+ * `NO_SUBSCRIPTION` when the account has nothing to manage, `NETWORK_ERROR`
+ * when the server could not be reached, otherwise `INTERNAL_ERROR`.
  */
 export async function createCustomerPortal(): Promise<string> {
   return invoke<string>("create_customer_portal");

@@ -132,9 +132,10 @@ export const EXPECTED_CODES: ReadonlySet<string> = new Set([
 
 /**
  * Backstop for a generic code whose text is plainly a connectivity failure.
- * The shell's licence / sign-in / checkout calls go over HTTP and wrap a
- * failed request as `INTERNAL_ERROR` ("… request failed: error sending
- * request …"); being offline is not a bug either.
+ * The shell's own HTTP calls now tag that as `NETWORK_ERROR` themselves
+ * (`http_error` in src-tauri/src/commands.rs); this catches what a backend
+ * from before that change — or a call site added without it — still wraps as
+ * `INTERNAL_ERROR` ("… request failed: error sending request …").
  */
 const NETWORK_TEXT =
   /error sending request|dns error|failed to lookup address|could not resolve|failed to resolve|connection (?:refused|reset|closed|aborted)|timed out|network is unreachable|no route to host|could not reach|failed to fetch|networkerror/i;

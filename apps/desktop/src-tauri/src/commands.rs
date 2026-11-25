@@ -2488,6 +2488,30 @@ async fn error_code_of(resp: reqwest::Response) -> String {
         .unwrap_or_default()
 }
 
+/// Whether a failed `reqwest` call never got (all of) an answer — offline,
+/// DNS, connection refused or reset, timeout, TLS, a body cut off mid-read.
+///
+/// A response that *arrived* and failed — an error status, a body that will
+/// not parse — is not connectivity, and neither is a request we built wrong.
+fn is_connectivity_error(e: &reqwest::Error) -> bool {
+    e.is_connect() || e.is_timeout() || e.is_request() || e.is_body()
+}
+
+/// Map a failed `reqwest` call to the error the frontend sees.
+///
+/// A connectivity failure is the user's network, not our bug: it becomes
+/// [`AdgitterError::Network`] (`NETWORK_ERROR`), which the UI explains with a
+/// "check your connection" hint and does not file as a crash report. Anything
+/// else stays `Internal` — still reported, because that one is ours.
+pub(crate) fn http_error(context: &str, e: reqwest::Error) -> AdgitterError {
+    let message = format!("{context}: {e}");
+    if is_connectivity_error(&e) {
+        AdgitterError::Network(message)
+    } else {
+        AdgitterError::Internal(message)
+    }
+}
+
 /// Exchange a Clerk session JWT for a real signed license and persist it.
 ///
 /// POSTs `{clerkJwt, deviceId, deviceName, evictOldestDevice}` to
@@ -2543,9 +2567,7 @@ pub async fn issue_license(
         let resp = match sent {
             Ok(r) => r,
             Err(e) => {
-                last = Some(AdgitterError::Internal(format!(
-                    "license request failed: {e}"
-                )));
+                last = Some(http_error("license request failed", e));
                 continue;
             }
         };
@@ -2611,7 +2633,7 @@ async fn license_from_response(
     let issued: IssueResponse = resp
         .json()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("license response parse failed: {e}")))?;
+        .map_err(|e| http_error("license response parse failed", e))?;
 
     // Verify offline, pinning this machine's device id, before we trust or store.
     let dto = verify_token(&issued.license, Some(device_id));
@@ -2671,7 +2693,7 @@ pub async fn renew_license(
         }))
         .send()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("license renew failed: {e}")))?;
+        .map_err(|e| http_error("license renew failed", e))?;
 
     if !resp.status().is_success() {
         let status = resp.status();
@@ -2687,7 +2709,7 @@ pub async fn renew_license(
     let issued: IssueResponse = resp
         .json()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("renew response parse failed: {e}")))?;
+        .map_err(|e| http_error("renew response parse failed", e))?;
 
     let dto = verify_token(&issued.license, Some(&device));
     if dto.status != "invalid" {
@@ -2805,7 +2827,7 @@ async fn trial_request(app: &AppHandle, path: &str) -> AdgitterResult<reqwest::R
         .json(&serde_json::json!({ "license": license, "machineId": machine }))
         .send()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("trial request failed: {e}")))?;
+        .map_err(|e| http_error("trial request failed", e))?;
     if resp.status().is_success() {
         return Ok(resp);
     }
@@ -2824,7 +2846,7 @@ pub async fn trial_status(app: AppHandle) -> AdgitterResult<TrialStatusDto> {
         .await?
         .json()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("trial status parse failed: {e}")))
+        .map_err(|e| http_error("trial status parse failed", e))
 }
 
 /// Start the free trial and persist the licence that carries it.
@@ -2840,7 +2862,7 @@ pub async fn start_trial(app: AppHandle) -> AdgitterResult<LicenseStatusDto> {
         .await?
         .json()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("trial response parse failed: {e}")))?;
+        .map_err(|e| http_error("trial response parse failed", e))?;
     let dto = verify_token(&issued.license, Some(&device));
     if dto.status != "invalid" {
         persist_token(&app, &issued.license);
@@ -2873,7 +2895,7 @@ pub async fn create_checkout(app: AppHandle, kind: String, id: String) -> Adgitt
         .json(&body)
         .send()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("checkout request failed: {e}")))?;
+        .map_err(|e| http_error("checkout request failed", e))?;
 
     if !resp.status().is_success() {
         let status = resp.status();
@@ -2886,7 +2908,7 @@ pub async fn create_checkout(app: AppHandle, kind: String, id: String) -> Adgitt
     let v: serde_json::Value = resp
         .json()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("checkout response parse failed: {e}")))?;
+        .map_err(|e| http_error("checkout response parse failed", e))?;
     v.get("url")
         .and_then(|u| u.as_str())
         .map(str::to_owned)
@@ -2935,7 +2957,7 @@ pub async fn create_customer_portal(app: AppHandle) -> AdgitterResult<String> {
         .json(&serde_json::json!({ "license": license }))
         .send()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("portal request failed: {e}")))?;
+        .map_err(|e| http_error("portal request failed", e))?;
 
     if !resp.status().is_success() {
         let status = resp.status();
@@ -2959,7 +2981,7 @@ pub async fn create_customer_portal(app: AppHandle) -> AdgitterResult<String> {
     let v: serde_json::Value = resp
         .json()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("portal response parse failed: {e}")))?;
+        .map_err(|e| http_error("portal response parse failed", e))?;
     v.get("url")
         .and_then(|u| u.as_str())
         .map(str::to_owned)
@@ -3089,10 +3111,11 @@ pub async fn clerk_portal_capabilities(
         .timeout(CLERK_ENVIRONMENT_TIMEOUT)
         .build()
         .map_err(|e| AdgitterError::Internal(format!("could not build an HTTP client: {e}")))?;
-    let resp =
-        client.get(&url).send().await.map_err(|e| {
-            AdgitterError::Internal(format!("could not reach the Clerk instance: {e}"))
-        })?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| http_error("could not reach the Clerk instance", e))?;
     // A non-2xx answer is a *failed probe*, not an instance with nothing
     // configured. Reporting it as the latter would silently hide the very
     // buttons this probe exists to govern, so a Clerk hiccup would look
@@ -3280,7 +3303,7 @@ pub async fn remove_device(app: AppHandle, device_id: String) -> AdgitterResult<
         .bearer_auth(token)
         .send()
         .await
-        .map_err(|e| AdgitterError::Internal(format!("device removal failed: {e}")))?
+        .map_err(|e| http_error("device removal failed", e))?
         .error_for_status()
         .map_err(|e| AdgitterError::Internal(format!("device removal rejected: {e}")))?;
     Ok(())
@@ -5372,5 +5395,141 @@ mod trial_tests {
         let v: TrialStatusDto =
             serde_json::from_str(r#"{"state":"available","days":14,"plan":"advance"}"#).unwrap();
         assert_eq!(v.ends_ms, None);
+    }
+}
+
+#[cfg(test)]
+mod http_error_tests {
+    //! `http_error` against real `reqwest` failures, so a change in how reqwest
+    //! classifies its errors shows up here rather than as crash reports from
+    //! users who are merely offline.
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::time::Duration;
+
+    /// Answer every connection with `response` (or hold it open, unanswered,
+    /// when `None`) and return the base URL.
+    fn serve(response: Option<&'static str>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let mut held = Vec::new();
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                match response {
+                    Some(r) => {
+                        let _ = stream.write_all(r.as_bytes());
+                    }
+                    None => held.push(stream),
+                }
+            }
+        });
+        format!("http://{addr}/")
+    }
+
+    fn code_of<T>(r: Result<T, reqwest::Error>, context: &str) -> &'static str {
+        match r {
+            Ok(_) => panic!("{context}: expected a failure"),
+            Err(e) => http_error(context, e).code(),
+        }
+    }
+
+    #[test]
+    fn a_refused_connection_is_a_network_error() {
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let sent = tauri::async_runtime::block_on(
+            reqwest::Client::new()
+                .get(format!("http://127.0.0.1:{port}/"))
+                .send(),
+        );
+        assert_eq!(code_of(sent, "license renew failed"), "NETWORK_ERROR");
+    }
+
+    #[test]
+    fn a_timeout_is_a_network_error() {
+        let url = serve(None);
+        // Built inside the runtime: a client with a timeout needs its timer.
+        let sent = tauri::async_runtime::block_on(async {
+            reqwest::Client::builder()
+                .timeout(Duration::from_millis(200))
+                .build()
+                .unwrap()
+                .get(url)
+                .send()
+                .await
+        });
+        assert_eq!(code_of(sent, "trial request failed"), "NETWORK_ERROR");
+    }
+
+    #[test]
+    fn a_body_that_does_not_parse_is_still_internal() {
+        let url = serve(Some(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 8\r\n\
+             Connection: close\r\n\r\nnot json",
+        ));
+        let parsed = tauri::async_runtime::block_on(async {
+            reqwest::Client::new()
+                .get(url)
+                .send()
+                .await
+                .unwrap()
+                .json::<serde_json::Value>()
+                .await
+        });
+        assert_eq!(
+            code_of(parsed, "checkout response parse failed"),
+            "INTERNAL_ERROR",
+            "the server answered: a bad answer is ours to look at"
+        );
+    }
+
+    #[test]
+    fn an_error_status_is_still_internal() {
+        let url = serve(Some(
+            "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        ));
+        let checked = tauri::async_runtime::block_on(async {
+            reqwest::Client::new()
+                .delete(url)
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+        });
+        assert_eq!(
+            code_of(checked, "device removal rejected"),
+            "INTERNAL_ERROR"
+        );
+    }
+
+    #[test]
+    fn the_network_error_keeps_its_context_for_the_toast() {
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let err = tauri::async_runtime::block_on(
+            reqwest::Client::new()
+                .get(format!("http://127.0.0.1:{port}/"))
+                .send(),
+        )
+        .unwrap_err();
+        let json = serde_json::to_value(http_error("portal request failed", err)).unwrap();
+        assert_eq!(json["code"], "NETWORK_ERROR");
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("network error: portal request failed: "),
+            "{json}"
+        );
     }
 }

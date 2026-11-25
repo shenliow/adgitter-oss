@@ -41,6 +41,18 @@ pub enum AdgitterError {
     #[error("push rejected ({0}) — pull first, then push again")]
     PushRejected(String),
 
+    /// An HTTP request that never got an answer: offline, DNS failure,
+    /// connection refused or reset, timeout, TLS handshake. The user's
+    /// connection is the cause, so it shares `NETWORK_ERROR` with the libgit2
+    /// transport failures [`git_error_code`] classifies — the frontend shows
+    /// the "check your connection" hint and files no crash report.
+    ///
+    /// Only for requests that got *no* response: a server that answered with
+    /// an error status, or a body that would not parse, is still `Internal`
+    /// (and still reported), because that is ours to look at.
+    #[error("network error: {0}")]
+    Network(String),
+
     /// A paid feature was invoked without a license that grants it.
     /// Carries the underlying reason so the UI can prompt an upgrade.
     ///
@@ -168,6 +180,7 @@ impl AdgitterError {
             Self::Internal(_) => "INTERNAL_ERROR",
             Self::InvalidOperation(_) => "INVALID_OPERATION",
             Self::PushRejected(_) => "PUSH_REJECTED",
+            Self::Network(_) => "NETWORK_ERROR",
             Self::FeatureLocked(_) => "FEATURE_LOCKED",
             Self::LicenseDeviceMismatch => "LICENSE_DEVICE_MISMATCH",
             Self::LicenseExpired => "LICENSE_EXPIRED",
@@ -683,6 +696,9 @@ mod tests {
         let rejected = AdgitterError::PushRejected("refs/heads/main: fetch first".into());
         assert_eq!(rejected.code(), "PUSH_REJECTED");
         assert!(rejected.to_string().contains("pull first"));
+        // The shell's HTTP calls share the libgit2 transports' network code.
+        let offline = AdgitterError::Network("license renew failed: dns error".into());
+        assert_eq!(offline.code(), "NETWORK_ERROR");
     }
 
     #[test]
