@@ -342,6 +342,9 @@ export const ko: Catalog = {
   "personalize.small": "작게",
   "personalize.medium": "보통",
   "personalize.large": "크게",
+  "personalize.animations": "애니메이션 피드백",
+  "personalize.animationsHint":
+    "커밋, 병합, 리베이스, 체리픽 시 새 커밋 원이 원본 원에서 복제되어 새 위치로 이동합니다.",
   "personalize.preview": "미리보기",
   "personalize.apply": "적용",
   "personalize.inUse": "사용 중",

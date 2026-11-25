@@ -66,6 +66,7 @@ const CORRUPT_RAW = `${JSON.stringify(
       textSize: "large",
       font: "mono",
       graphTheme: "retro",
+      animations: true,
     },
   },
   null,
@@ -102,6 +103,7 @@ const PERSONALIZE = {
   textSize: "large" as const,
   font: "mono" as const,
   graphTheme: "retro",
+  animations: true,
 };
 
 const LOG_ANYTIME: LogAnytimeSettings = {
@@ -827,6 +829,7 @@ describe("seeding and lifecycle", () => {
           textSize: "large",
           font: "system",
           graphTheme: "retro",
+          animations: true,
         },
       }),
     );
@@ -837,6 +840,7 @@ describe("seeding and lifecycle", () => {
       textSize: "large",
       font: "system",
       graphTheme: "retro",
+      animations: true,
     });
 
     readProjectConfig.mockResolvedValueOnce(
@@ -847,6 +851,7 @@ describe("seeding and lifecycle", () => {
           textSize: "small",
           font: "system",
           graphTheme: "classic",
+          animations: true,
         },
       }),
     );
@@ -857,6 +862,7 @@ describe("seeding and lifecycle", () => {
       textSize: "small",
       font: "system",
       graphTheme: "classic",
+      animations: true,
     });
   });
 });

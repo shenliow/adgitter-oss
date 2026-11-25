@@ -156,6 +156,7 @@ function personalize(theme = "default"): PersonalizeSettings {
     textSize: "medium",
     font: "system",
     graphTheme: "default",
+    animations: true,
   };
 }
 

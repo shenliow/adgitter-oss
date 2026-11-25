@@ -23,6 +23,7 @@ describe("applyTheme", () => {
         textSize: "large",
         font: "system",
         graphTheme: "default",
+        animations: true,
       },
       el,
     );
@@ -39,6 +40,7 @@ describe("applyTheme", () => {
         textSize: "medium",
         font: "system",
         graphTheme: "default",
+        animations: true,
       },
       el,
     );
@@ -54,6 +56,7 @@ describe("applyTheme", () => {
         textSize: "small",
         font: "system",
         graphTheme: "default",
+        animations: true,
       },
       el,
     );
@@ -65,6 +68,7 @@ describe("applyTheme", () => {
         textSize: "small",
         font: "system",
         graphTheme: "default",
+        animations: true,
       },
       el,
     );
@@ -81,6 +85,7 @@ describe("applyTheme", () => {
         textSize: "medium",
         font: "system",
         graphTheme: "default",
+        animations: true,
       },
       el,
     );
@@ -109,6 +114,7 @@ describe("remote pack resolution order", () => {
     textSize: "medium" as const,
     font: "system" as const,
     graphTheme: "default",
+    animations: true,
   });
 
   it("resolves a registered remote pack", () => {

@@ -332,6 +332,9 @@ export const zhHans: Catalog = {
   "personalize.small": "小",
   "personalize.medium": "中",
   "personalize.large": "大",
+  "personalize.animations": "动画反馈",
+  "personalize.animationsHint":
+    "提交、合并、rebase 或 cherry-pick 时，新的 commit 圆点会从来源圆点复制出来并移动到新位置。",
   "personalize.preview": "预览",
   "personalize.apply": "应用",
   "personalize.inUse": "使用中",

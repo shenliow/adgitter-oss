@@ -348,6 +348,9 @@ export const fr: Catalog = {
   "personalize.small": "Petit",
   "personalize.medium": "Moyen",
   "personalize.large": "Grand",
+  "personalize.animations": "Retour animé",
+  "personalize.animationsHint":
+    "Lors d'un commit, d'une fusion, d'un rebase ou d'un cherry-pick, les nouveaux cercles de commit sont copiés depuis leur cercle source et glissent vers leur nouvelle position.",
   "personalize.preview": "Aperçu",
   "personalize.apply": "Appliquer",
   "personalize.inUse": "En cours d'utilisation",

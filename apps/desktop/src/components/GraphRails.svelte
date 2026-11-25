@@ -19,8 +19,8 @@
   the transient drag/selection state that tints a node. Those cross as props.
 
   Internal paint order is load-bearing and must not be reordered: edge tiles →
-  junction tiles → branch track → HEAD "+" → nodes → merge-drag connector. See
-  the comments at each step.
+  junction tiles → branch track → HEAD "+" → nodes → animation-feedback
+  flights → merge-drag connector. See the comments at each step.
 -->
 <script lang="ts">
   import type { GraphLayout, LaneEdge } from '../lib/lanes';
@@ -49,6 +49,25 @@
    *  `stub` (HEAD already on row 0 — a short dashed tick straight above it)
    *  and `spur` (HEAD lower down — a path routed round the lane cluster) is
    *  ever set. */
+  /** One animation-feedback circle in flight (MetroGraph plans it — see
+   *  lib/graphAnimation.ts). Drawn AT its landing spot and animated from the
+   *  source offset (`dx`/`dy`) to zero, so it ends exactly where the real
+   *  node appears when the flight is removed. */
+  interface FlightCircle {
+    sha: string;
+    /** Landing position (the new commit's node centre). */
+    x: number;
+    y: number;
+    /** Source circle centre minus landing position. */
+    dx: number;
+    dy: number;
+    /** The landing lane's colour, and the source circle's (where it starts). */
+    color: string;
+    fromColor: string;
+    delayMs: number;
+    durationMs: number;
+  }
+
   interface HeadPlus {
     /** Centre of the "+" glyph. */
     x: number;
@@ -77,6 +96,7 @@
     mergeTargetSha,
     mergeDragGeom,
     headPlus,
+    flights = [],
   }: {
     /** Size of the rails canvas — MetroGraph owns it (the scroller width and
      *  the row count decide it) and the other layers measure against it. */
@@ -132,7 +152,13 @@
       arrowPoints: string;
     } | null;
     headPlus: HeadPlus | null;
+    /** Animation feedback: new commit circles flying in from their source.
+     *  While a commit is in this list its real node is not drawn — the flying
+     *  copy stands in for it until it lands. */
+    flights?: FlightCircle[];
   } = $props();
+
+  const arriving = $derived(new Set(flights.map((f) => f.sha)));
 
   // Thin aliases so the geometry reads the same here as it did inline.
   const laneX = (l: number) => edgeMapping.laneX(l);
@@ -591,7 +617,7 @@
   <g class="nodes">
     {#each commits as c, i (c.sha)}
       {@const a = layout.assignments.get(c.sha)}
-      {#if a}
+      {#if a && !arriving.has(c.sha)}
         {@const isHead = c.sha === headSha}
         {@const isSel = c.sha === selectedSha || selection.has(c.sha)}
         {@const isDropTarget =
@@ -691,6 +717,33 @@
       {/if}
     {/each}
   </g>
+
+  <!-- Animation feedback: each new commit's circle, copied out of its source
+       circle (a smaller copy that grows as it travels) and landing on its own
+       spot. Painted over the nodes so a copy leaving a circle reads as coming
+       OUT of it; the source circle itself stays where it is. -->
+  {#if flights.length > 0}
+    <g class="flights">
+      {#each flights as f (f.sha)}
+        <g
+          class="adg-commit-flight"
+          data-flight={f.sha}
+          style="--dx:{f.dx}px; --dy:{f.dy}px; --from:{f.fromColor}; --to:{f.color}; animation-delay:{f.delayMs}ms; animation-duration:{f.durationMs}ms"
+        >
+          <circle cx={f.x} cy={f.y} r={NODE_R + 3} fill="#fff" />
+          <circle
+            class="adg-commit-flight-dot"
+            cx={f.x}
+            cy={f.y}
+            r={NODE_R}
+            fill={f.color}
+            stroke="#fff"
+            stroke-width="2.5"
+          />
+        </g>
+      {/each}
+    </g>
+  {/if}
 
   <!-- Live connector for the branch-head merge drag (see mergeDrag in the
        script): rails-styled — same width/caps/lane-color as the edges

@@ -351,6 +351,9 @@ export const de: Catalog = {
   "personalize.small": "Klein",
   "personalize.medium": "Mittel",
   "personalize.large": "Groß",
+  "personalize.animations": "Animiertes Feedback",
+  "personalize.animationsHint":
+    "Beim Committen, Mergen, Rebasen oder Cherry-Picken fliegen neue Commit-Kreise aus ihrem Quellkreis an ihre neue Position.",
   "personalize.preview": "Vorschau",
   "personalize.apply": "Anwenden",
   "personalize.inUse": "In Verwendung",

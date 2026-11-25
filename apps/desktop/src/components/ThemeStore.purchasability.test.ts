@@ -107,6 +107,7 @@ function render(): HTMLDivElement {
     textSize: "medium",
     font: "system",
     graphTheme: "default",
+    animations: true,
   };
   host = document.createElement("div");
   document.body.appendChild(host);

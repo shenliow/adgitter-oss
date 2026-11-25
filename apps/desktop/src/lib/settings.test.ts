@@ -50,6 +50,22 @@ describe("mergeSettings (defensive)", () => {
     expect(out.personalize.graphTheme).toBe("default");
   });
 
+  it("animation feedback is on by default, and a saved off stays off", () => {
+    expect(DEFAULT_SETTINGS.personalize.animations).toBe(true);
+    // Settings saved before the option existed get the default.
+    expect(mergeSettings({ personalize: {} }).personalize.animations).toBe(
+      true,
+    );
+    expect(
+      mergeSettings({ personalize: { animations: false } }).personalize
+        .animations,
+    ).toBe(false);
+    expect(
+      mergeSettings({ personalize: { animations: "no" } }).personalize
+        .animations,
+    ).toBe(true);
+  });
+
   it("keeps a valid graphTheme id and defaults an untyped one", () => {
     expect(
       mergeSettings({ personalize: { graphTheme: "blueprint" } }).personalize

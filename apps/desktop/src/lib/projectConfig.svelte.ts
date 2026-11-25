@@ -257,6 +257,7 @@ function personalizeConfig(v: unknown): PersonalizeSettings | null {
     textSize: oneOf(r.textSize, ["small", "medium", "large"], d.textSize),
     font: oneOf(r.font, ["system", "sans", "mono"], d.font),
     graphTheme: str(r.graphTheme, d.graphTheme),
+    animations: bool(r.animations, d.animations),
   };
 }
 

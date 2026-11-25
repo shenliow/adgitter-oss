@@ -342,6 +342,9 @@ export const hi: Catalog = {
   "personalize.small": "छोटा",
   "personalize.medium": "मध्यम",
   "personalize.large": "बड़ा",
+  "personalize.animations": "एनिमेशन फ़ीडबैक",
+  "personalize.animationsHint":
+    "कमिट, मर्ज, रीबेस या चेरी-पिक करने पर नए कमिट वृत्त अपने स्रोत वृत्त से कॉपी होकर नई जगह तक जाते हैं।",
   "personalize.preview": "पूर्वावलोकन",
   "personalize.apply": "लागू करें",
   "personalize.inUse": "उपयोग में",

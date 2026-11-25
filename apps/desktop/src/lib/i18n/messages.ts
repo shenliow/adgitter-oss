@@ -416,6 +416,9 @@ export const en = {
   "personalize.small": "Small",
   "personalize.medium": "Medium",
   "personalize.large": "Large",
+  "personalize.animations": "Animation feedback",
+  "personalize.animationsHint":
+    "Animate new commit circles flying out of their source when you commit, merge, rebase or cherry-pick.",
   "personalize.preview": "Preview",
   "personalize.apply": "Apply",
   "personalize.inUse": "In use",
@@ -1526,6 +1529,9 @@ const zhHant: Catalog = {
   "personalize.small": "小",
   "personalize.medium": "中",
   "personalize.large": "大",
+  "personalize.animations": "動畫回饋",
+  "personalize.animationsHint":
+    "提交、合併、rebase 或 cherry-pick 時，新的 commit 圓點會從來源圓點複製出來並移動到新位置。",
   "personalize.preview": "預覽",
   "personalize.apply": "套用",
   "personalize.inUse": "使用中",

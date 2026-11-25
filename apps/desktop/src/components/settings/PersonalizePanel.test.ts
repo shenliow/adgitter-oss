@@ -4,7 +4,7 @@ import type { PersonalizeSettings } from "../../lib/settings";
 import type { TutorialAction } from "../../lib/tutorial/types";
 import type { StorePurchase } from "../../lib/themes/storeOwnership.svelte";
 import { en, catalogs } from "../../lib/i18n/messages";
-import { setLocale } from "../../lib/i18n/index.svelte";
+import { setLocale, t } from "../../lib/i18n/index.svelte";
 
 // Controllable mock theme store (ownership drives Apply vs Buy).
 const owned = new Set<string>();
@@ -46,6 +46,7 @@ function value(over: Partial<PersonalizeSettings> = {}): PersonalizeSettings {
     textSize: "medium",
     font: "system",
     graphTheme: "default",
+    animations: true,
     ...over,
   };
 }
@@ -67,6 +68,18 @@ const rowFor = (h: HTMLElement, name: string) =>
   )!;
 
 describe("PersonalizePanel", () => {
+  it("the animation-feedback checkbox reflects and edits the draft", () => {
+    const v = value({ animations: true });
+    const h = render(v);
+    const box = [...h.querySelectorAll<HTMLLabelElement>("label.field")]
+      .find((l) => l.textContent?.includes(t("personalize.animations")))!
+      .querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(box.checked).toBe(true);
+    box.click();
+    flushSync();
+    expect(v.animations).toBe(false);
+  });
+
   it("font + text-size selects reflect the draft", () => {
     const h = render(value({ font: "mono", textSize: "large" }));
     const selects = h.querySelectorAll("select");

@@ -346,6 +346,9 @@ export const ja: Catalog = {
   "personalize.small": "小",
   "personalize.medium": "中",
   "personalize.large": "大",
+  "personalize.animations": "アニメーションフィードバック",
+  "personalize.animationsHint":
+    "コミット、マージ、リベース、チェリーピック時に、新しいコミットの円が元の円から複製されて新しい位置へ移動します。",
   "personalize.preview": "プレビュー",
   "personalize.apply": "適用",
   "personalize.inUse": "使用中",

@@ -1,5 +1,11 @@
 <script lang="ts">
+  import { onDestroy, untrack } from 'svelte';
   import { assignLanes } from '../lib/lanes';
+  import {
+    planFlights,
+    prefersReducedMotion,
+    type GraphAnimationHint,
+  } from '../lib/graphAnimation';
   import {
     resolveGraphGeometry,
     NODE_R as BASE_NODE_R,
@@ -66,6 +72,8 @@
     personalizeFont = 'system',
     interactive = true,
     handTool = false,
+    animate = false,
+    animationHint = null,
   }: {
     commits?: Commit[];
     refs?: RefList | null;
@@ -135,6 +143,12 @@
      *  the graph — every other pointer interaction (select, node/branch drag,
      *  marquee) is suppressed so the whole surface is grabbable. */
     handTool?: boolean;
+    /** Settings → Personalize → Animation feedback. */
+    animate?: boolean;
+    /** Armed by App right before a graph operation (commit, merge, rebase,
+     *  cherry-pick, …): the next graph update that adds commits animates
+     *  them flying out of their source circles. A new `seq` re-arms. */
+    animationHint?: GraphAnimationHint | null;
   } = $props();
 
   // The active graph theme (asset-swap seam). Resolved up here, ahead of the
@@ -343,6 +357,146 @@
   const headColor = $derived(
     laneColor(layout.assignments.get(headSha ?? '')?.colorIndex ?? 0),
   );
+
+  // --- Animation feedback ---------------------------------------------------
+  // App arms `animationHint` right before a graph operation. Arming snapshots
+  // the graph as it is (commits + where every circle sits); the next commit
+  // list that brings new commits is diffed against that snapshot
+  // (`planFlights`), and each new circle is drawn flying out of its source.
+  // The snapshot is what keeps this tied to the operation: a background
+  // refresh, a pull or an undo never arms anything, so it never animates.
+  const FLIGHT_MS = 560;
+  const STAGGER_MS = 70;
+  /** Total stagger cap, so a 40-commit rebase still lands in about a second. */
+  const STAGGER_BUDGET_MS = 700;
+  /** An armed snapshot nothing answered (the op failed, or added nothing) is
+   *  dropped after this, so a much later refresh can't play a stale plan. */
+  const ARMED_TTL_MS = 15_000;
+
+  interface Snapshot {
+    hint: GraphAnimationHint;
+    commits: Commit[];
+    pos: Map<string, { x: number; y: number; color: string }>;
+    at: number;
+  }
+  let armed: Snapshot | null = null;
+  let lastArmedSeq = -1;
+  let flights = $state<
+    {
+      sha: string;
+      x: number;
+      y: number;
+      dx: number;
+      dy: number;
+      color: string;
+      fromColor: string;
+      delayMs: number;
+      durationMs: number;
+    }[]
+  >([]);
+  let flightTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function nodePositions(): Map<
+    string,
+    { x: number; y: number; color: string }
+  > {
+    const pos = new Map<string, { x: number; y: number; color: string }>();
+    commits.forEach((c, i) => {
+      const a = layout.assignments.get(c.sha);
+      if (a)
+        pos.set(c.sha, {
+          x: laneX(a.lane),
+          y: rowY(i),
+          color: laneColor(a.colorIndex),
+        });
+    });
+    return pos;
+  }
+
+  // Arm: a new hint seq snapshots the graph as it stands; a cleared hint (the
+  // op failed) drops whatever was armed.
+  $effect(() => {
+    const hint = animationHint;
+    if (!hint) {
+      armed = null;
+      return;
+    }
+    if (hint.seq === lastArmedSeq) return;
+    lastArmedSeq = hint.seq;
+    untrack(() => {
+      armed =
+        animate && !prefersReducedMotion()
+          ? { hint, commits, pos: nodePositions(), at: Date.now() }
+          : null;
+      // A commit reports its sha after it exists, and the file watcher may
+      // already have put it on screen: play right away instead of waiting
+      // for a refresh that would bring nothing new.
+      const created = hint.created ?? [];
+      if (armed && created.some((sha) => rowBySha.has(sha))) {
+        play(armed, commits);
+      }
+    });
+  });
+
+  // Play: the first commit list after arming that brings new commits.
+  $effect(() => {
+    const next = commits;
+    untrack(() => {
+      const snap = armed;
+      if (!snap || next === snap.commits) return;
+      if (Date.now() - snap.at > ARMED_TTL_MS || !animate) {
+        armed = null;
+        return;
+      }
+      play(snap, next);
+    });
+  });
+
+  /** Plan and start the flights for `next` against the armed snapshot. */
+  function play(snap: Snapshot, next: Commit[]) {
+    {
+      const plan = planFlights(snap.commits, next, snap.hint);
+      // Nothing new yet (an intermediate refresh): stay armed for the next.
+      if (plan.length === 0) return;
+      armed = null;
+      const now = nodePositions();
+      const step = Math.min(STAGGER_MS, STAGGER_BUDGET_MS / plan.length);
+      const out: typeof flights = [];
+      plan.forEach((p, i) => {
+        const to = now.get(p.sha);
+        // The source where it is now; where it was, if the op removed it
+        // (a rebased-away original with ghosts hidden).
+        const from = now.get(p.from) ?? snap.pos.get(p.from);
+        const a = layout.assignments.get(p.sha);
+        if (!to || !from || !a) return;
+        out.push({
+          sha: p.sha,
+          x: to.x,
+          y: to.y,
+          dx: from.x - to.x,
+          dy: from.y - to.y,
+          color: laneColor(a.colorIndex),
+          // A copy of the source: it leaves in the source's colour and
+          // takes on its own lane's colour as it lands.
+          fromColor: from.color,
+          delayMs: Math.round(i * step),
+          durationMs: FLIGHT_MS,
+        });
+      });
+      if (out.length === 0) return;
+      flights = out;
+      if (flightTimer) clearTimeout(flightTimer);
+      const total = out[out.length - 1].delayMs + FLIGHT_MS;
+      flightTimer = setTimeout(() => {
+        flights = [];
+        flightTimer = null;
+      }, total + 30);
+    }
+  }
+
+  onDestroy(() => {
+    if (flightTimer) clearTimeout(flightTimer);
+  });
 
   // The "+" (new-commit) affordance always sits at row-0 height, at the top
   // of the graph. Its X position follows HEAD: aligned with HEAD's lane
@@ -1781,6 +1935,7 @@
         mergeTargetSha={mergeDrag?.targetSha ?? null}
         {mergeDragGeom}
         {headPlus}
+        {flights}
       />
 
       <!-- Layer 2: interactive rows (axis + message + author) -->

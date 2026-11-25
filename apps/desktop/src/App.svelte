@@ -131,6 +131,7 @@
   import { localizedError } from './lib/i18n/errors';
   import { configureTelemetry, report, type Transport } from './lib/telemetry';
   import { errorReport, isExpectedError } from './lib/errorReport';
+  import type { GraphAnimationHint } from './lib/graphAnimation';
   import {
     refreshEntitlement,
     hasFeature,
@@ -1799,12 +1800,59 @@
     return result.outcome;
   }
 
+  // --- Animation feedback (Settings → Personalize) ------------------------
+  // Armed right before a graph operation starts; MetroGraph snapshots the
+  // graph at that moment and animates the commits the operation adds (see
+  // lib/graphAnimation.ts). Only operations arm it — a background refresh,
+  // pull or undo never does, so those never animate.
+  let graphAnimationHint = $state<GraphAnimationHint | null>(null);
+  let graphAnimationSeq = 0;
+  /**
+   * `head`: the new commit(s) come out of the current circle (commit, merge,
+   * revert). `sources`: each new commit comes out of the commit it replays
+   * (rebase, cherry-pick, reword, squash, drop, purge, add file).
+   */
+  function armGraphAnimation(
+    mode: GraphAnimationHint['mode'],
+    opts: { sources?: string[]; created?: string[] } = {},
+  ) {
+    graphAnimationHint = {
+      seq: ++graphAnimationSeq,
+      mode,
+      headBefore: refs?.head.target ?? null,
+      ...opts,
+    };
+  }
+  /** The op failed: nothing it armed may animate a later, unrelated update. */
+  function disarmGraphAnimation() {
+    graphAnimationHint = null;
+  }
+
   async function runPending(message: string) {
     if (!pending || !repoPath) return;
     // What the tutorial hears once the op has landed (null: nothing to say —
     // e.g. a conflict, which pauses the op rather than completing it).
     let outcomeEvent: TutorialEvent | null = null;
     const headBefore = refs?.head.branch ?? '';
+    switch (pending.kind) {
+      case 'revert':
+      case 'merge':
+      case 'mergeBranches':
+        armGraphAnimation('head');
+        break;
+      case 'cherryPick':
+      case 'cherryPickNewBranch':
+        armGraphAnimation('sources', { sources: [...pending.shas] });
+        break;
+      case 'rebaseOnto':
+      case 'rebaseBranch':
+      case 'drop':
+      case 'reword':
+      case 'squash':
+        armGraphAnimation('sources');
+        break;
+      // reset / removeBranch add no commits: nothing to animate.
+    }
     opBusy = true;
     try {
       switch (pending.kind) {
@@ -1915,6 +1963,7 @@
       await refresh();
       if (outcomeEvent) tutNotify(outcomeEvent);
     } catch (e) {
+      disarmGraphAnimation();
       setError(e);
     } finally {
       opBusy = false;
@@ -1931,7 +1980,13 @@
     if (!repoPath || !selected) return;
     const sha = selected.sha;
     if (!tutAllows({ kind: 'reword', sha })) return;
-    const outcome = resolveOrOutcome(await reword(repoPath, sha, message));
+    armGraphAnimation('sources');
+    const outcome = resolveOrOutcome(
+      await reword(repoPath, sha, message).catch((e) => {
+        disarmGraphAnimation();
+        throw e;
+      }),
+    );
     if (outcome) {
       noticeRemapSkipped(outcome);
       canUndo = true;
@@ -1968,7 +2023,11 @@
     if (!repoPath) return;
     if (!tutAllows({ kind: 'purge', sha, path })) return;
     const prev = selected;
-    const outcome = await purgePath(repoPath, sha, path);
+    armGraphAnimation('sources');
+    const outcome = await purgePath(repoPath, sha, path).catch((e) => {
+      disarmGraphAnimation();
+      throw e;
+    });
     canUndo = true;
     // A skipped branch is the more actionable message than the success line.
     if (!noticeRemapSkipped(outcome)) notice = t('notice.purged', { path });
@@ -2036,7 +2095,11 @@
     if (!repoPath) return;
     if (!tutAllows({ kind: 'addFile', sha, path })) return;
     const prev = selected;
-    const outcome = await addFileToCommit(repoPath, sha, path);
+    armGraphAnimation('sources');
+    const outcome = await addFileToCommit(repoPath, sha, path).catch((e) => {
+      disarmGraphAnimation();
+      throw e;
+    });
     canUndo = true;
     // A skipped branch is the more actionable message than the success line.
     if (!noticeRemapSkipped(outcome)) notice = t('notice.addedFile', { path });
@@ -2112,6 +2175,9 @@
   async function doContinue() {
     if (!repoPath || !resolve) return;
     resolveBusy = true;
+    // Finishing a paused rebase/cherry-pick/merge: the rest of its commits
+    // land now. A merge's commit falls back to HEAD inside `sources` mode.
+    armGraphAnimation('sources');
     try {
       const result = await continueOp(repoPath);
       if (result.status === 'completed') {
@@ -2127,6 +2193,7 @@
       }
       await refresh();
     } catch (e) {
+      disarmGraphAnimation();
       setError(e);
     } finally {
       resolveBusy = false;
@@ -3754,6 +3821,8 @@
           onBranchMerge={requestBranchMerge}
           interactive={resolve === null}
           handTool={handTool && resolve === null}
+          animate={effectivePersonalize.animations}
+          animationHint={graphAnimationHint}
         />
       {/if}
 
@@ -3787,6 +3856,7 @@
           onClose={() => (activePanel = null)}
           onMutated={refresh}
           onCommitted={(sha) => {
+            armGraphAnimation('head', { created: [sha] });
             emitOutbound('commit', 'Commit created', sha);
             tutNotify({ kind: 'committed', sha });
           }}
@@ -3927,6 +3997,7 @@
     reloadKey={filesReload}
     onClose={() => (showCreateCommit = false)}
     onCommitted={(sha) => {
+      armGraphAnimation('head', { created: [sha] });
       emitOutbound('commit', 'Commit created', sha);
       tutNotify({ kind: 'committed', sha });
     }}

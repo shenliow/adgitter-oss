@@ -141,3 +141,58 @@ button {
   background: rgba(0, 0, 0, 0.3);
   background-clip: content-box;
 }
+
+/* Graph animation feedback (Settings → Personalize → Animation feedback;
+ * drawn by GraphRails, planned in lib/graphAnimation.ts). Each flight is
+ * drawn at its landing spot and starts offset back to its source circle,
+ * small and faint — a copy budding out of that circle — then travels and
+ * grows into place. `both` fill: it holds the source position through its
+ * stagger delay and the landing position until MetroGraph removes it, which
+ * is the moment the real node takes over.
+ *
+ * Global rather than in GraphRails' scoped <style> on purpose: any rule added
+ * there makes Svelte stamp its scope class on every element of that layer,
+ * and other code matches some of them by their exact `class` attribute. */
+.adg-commit-flight {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation-name: adg-commit-flight;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-fill-mode: both;
+}
+/* The copy leaves in its source's colour and lands in its own lane's. Same
+ * delay/duration as the travel (inherited from the flight group). */
+.adg-commit-flight-dot {
+  animation-name: adg-commit-flight-tint;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: both;
+  animation-delay: inherit;
+  animation-duration: inherit;
+}
+@keyframes adg-commit-flight-tint {
+  0% {
+    fill: var(--from);
+  }
+  100% {
+    fill: var(--to);
+  }
+}
+@keyframes adg-commit-flight {
+  0% {
+    transform: translate(var(--dx), var(--dy)) scale(0.5);
+    opacity: 0.4;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adg-commit-flight,
+  .adg-commit-flight-dot {
+    animation: none;
+  }
+}

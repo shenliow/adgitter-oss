@@ -128,6 +128,10 @@
           <option value="large">{t('personalize.large')}</option>
         </select>
       </label>
+      <label class="field" title={t('personalize.animationsHint')}>
+        <span>{t('personalize.animations')}</span>
+        <input type="checkbox" bind:checked={value.animations} />
+      </label>
     </div>
 
     <span class="gt-label">{t('personalize.graphTheme')}</span>

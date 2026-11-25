@@ -76,6 +76,11 @@ export interface PersonalizeSettings {
    *  background, decor), not CSS vars. This is the app's only purchasable
    *  "theme" product (sold via the graph-theme store). */
   graphTheme: string;
+  /** Animation feedback: a graph operation that adds commits (commit, merge,
+   *  rebase, cherry-pick, …) animates each new commit circle flying out of
+   *  its source circle (see lib/graphAnimation.ts). Always skipped when the
+   *  OS asks for reduced motion. */
+  animations: boolean;
 }
 
 /** Log Anytime: foreground auto-snapshot + paid background/squash. */
@@ -133,6 +138,7 @@ export const DEFAULT_SETTINGS: Settings = {
     textSize: "medium",
     font: "system",
     graphTheme: "default",
+    animations: true,
   },
   branchColors: {},
   locale: "en",
@@ -233,6 +239,7 @@ export function mergeSettings(raw: unknown): Settings {
       ),
       font: oneOf(p.font, ["system", "sans", "mono"], d.personalize.font),
       graphTheme: str(p.graphTheme, d.personalize.graphTheme),
+      animations: bool(p.animations, d.personalize.animations),
     },
     branchColors: strMap(r.branchColors),
     locale: str(r.locale, d.locale),
